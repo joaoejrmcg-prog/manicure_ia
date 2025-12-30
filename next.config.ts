@@ -6,8 +6,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
-  // Ensure we're not forcing static export
-  output: undefined,
+  // Output configuration is handled automatically by Vercel
 };
 
 export default nextConfig;
