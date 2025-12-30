@@ -13,14 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Manicure IA - Gestão Profissional",
-  description: "Gerencie seu negócio de beleza com inteligência artificial.",
+  title: "Meu Negócio IA",
+  description: "Gerencie seu negócio com inteligência artificial.",
   manifest: "/manifest.json",
   themeColor: "#0a0a0a",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Manicure IA",
+    title: "Meu Negócio IA",
   },
   icons: {
     icon: "/favicon.ico",

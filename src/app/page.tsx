@@ -13,23 +13,23 @@ function HomeContent() {
 
         <div className="relative z-10 flex flex-col h-full">
           {/* Header Minimalista */}
-          <div className="text-center space-y-4 mb-8 flex-shrink-0">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-medium">
-              <Sparkles className="w-4 h-4" />
-              <span>IA Ativa e Pronta</span>
-            </div>
-            <h1 className="text-4xl font-light text-neutral-200 tracking-tight">
+          <div className="text-center mb-4 flex-shrink-0">
+            <h1 className="text-2xl font-light text-neutral-200 tracking-tight flex items-center justify-center gap-3">
               Olá, como posso ajudar?
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-medium">
+                <Sparkles className="w-3 h-3" />
+                <span>IA</span>
+              </span>
             </h1>
           </div>
 
           {/* Action Feed (Card Superior) */}
-          <div className="max-w-2xl mx-auto w-full mb-6">
+          <div className="max-w-xl mx-auto w-full mb-4">
             <ActionFeed />
           </div>
 
           {/* Chat Area */}
-          <div className="flex-1 min-h-0 w-full max-w-2xl mx-auto">
+          <div className="flex-1 min-h-0 w-full max-w-xl mx-auto flex flex-col">
             <CommandCenter />
           </div>
         </div>

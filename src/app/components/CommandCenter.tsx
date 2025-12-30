@@ -752,7 +752,7 @@ export default function CommandCenter() {
     };
 
     return (
-        <div className="flex flex-col h-[600px] bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-full bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl">
             {/* Header */}
             <div className="p-4 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">

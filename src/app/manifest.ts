@@ -2,9 +2,9 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
-        name: 'Manicure IA - Gestão Profissional',
-        short_name: 'Manicure IA',
-        description: 'Gerencie seu negócio de beleza com inteligência artificial.',
+        name: 'Meu Negócio IA',
+        short_name: 'Meu Negócio IA',
+        description: 'Gerencie seu negócio com inteligência artificial.',
         start_url: '/',
         display: 'standalone',
         background_color: '#0a0a0a',
