@@ -3,8 +3,21 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AIResponse, IntentType } from "../types";
 
-const apiKey = process.env.GOOGLE_GEN_AI_KEY || process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey || "");
+// Helper to get all available API keys
+const getApiKeys = () => {
+  const keys = [
+    process.env.GOOGLE_GEN_AI_KEY,
+    process.env.GEMINI_API_KEY,
+    process.env.AI_API_KEY_1,
+    process.env.AI_API_KEY_2,
+    process.env.AI_API_KEY_3,
+    process.env.AI_API_KEY_4,
+    process.env.AI_API_KEY_5
+  ].filter((key): key is string => !!key && key.length > 0);
+
+  // Remove duplicates
+  return [...new Set(keys)];
+};
 
 const SYSTEM_INSTRUCTION = `
 Você é a assistente virtual de um prestador de serviços (SaaS). Sua função é interpretar comandos de voz/texto e estruturar ações em JSON.
@@ -19,7 +32,6 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
 
 2. **INTENÇÕES (INTENTS):**
    - ADD_CLIENT: Cadastrar cliente. (Requer: name).
-   - ADD_CLIENT: Cadastrar cliente. (Requer: name).
    - SCHEDULE_SERVICE: Agendar. (Requer: service, clientName, isoDate).
      - "isoDate": Data e hora exata no formato ISO 8601 (ex: "2023-10-27T14:30:00"). Calcule com base no "Contexto Temporal" fornecido.
      - Se o usuário for vago (ex: "semana que vem"), retorne "CONFIRMATION_REQUIRED" perguntando o dia e hora exatos.
@@ -29,13 +41,16 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
      - Gatilhos: "Recebi", "Pagou", "Cliente pagou", "Fiz a mão".
    - REGISTER_EXPENSE: Registrar despesa (Saída). (Requer: amount, description).
      - Gatilhos: "Paguei", "Comprei", "Gastei", "Conta de luz".
-   - DELETE_LAST_ACTION: Apagar o último registro feito.
-     - Gatilhos: "Apaga isso", "Desfaz", "Cancele o último", "Não era isso".
-   - RISKY_ACTION: Quando o usuário pede para apagar registros antigos, deletar tudo ou fazer alterações em massa.
-     - Gatilhos: "Apaga tudo", "Limpa o histórico", "Apaga a venda de ontem", "Deleta o cliente X".
-     - AÇÃO: Retorne uma mensagem amigável explicando que isso é arriscado por voz e sugerindo usar o menu manual.
-   - CONFIRMATION_REQUIRED: Quando você precisa que o usuário confirme os dados ou forneça dados faltantes.
-     - Sempre inclua "originalIntent" no objeto "data".
+   - REPORT: Gerar relatórios ou consultas.
+     - "data": { 
+         "entity": "APPOINTMENT" | "FINANCIAL" | "CLIENT", 
+         "metric": "LIST" | "SUM" | "COUNT" | "BEST", 
+         "period": "TODAY" | "MONTH" | "NEXT_MONTH" | "ALL",
+         "targetMonth": number (1-12, opcional),
+         "targetYear": number (opcional),
+         "filter": "INCOME" | "EXPENSE" | null 
+       }
+     - Gatilhos: "O que tem pra hoje?", "Quanto ganhei hoje?", "Quantos clientes atendi?", "Melhor cliente do mês", "Agenda de Janeiro".
    - UNKNOWN: Não entendeu ou falta dados críticos que impedem até de perguntar.
 
 3. **FORMATO DE RESPOSTA (JSON PURO):**
@@ -101,72 +116,86 @@ AI: {
   },
   "message": "Entendi. Confirma: 1. Cadastrar Felipe. 2. Agendar terça 10h. 3. Registrar sinal de R$ 50?"
 }
+
+**Cenário 6: Relatórios**
+User: "O que tem pra hoje?"
+AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "TODAY" }, "message": "Consultando agenda de hoje..." }
+
+User: "Quanto ganhei hoje?"
+AI: { "intent": "REPORT", "data": { "entity": "FINANCIAL", "metric": "SUM", "period": "TODAY", "filter": "INCOME" }, "message": "Calculando ganhos de hoje..." }
+
+User: "Agenda de Janeiro"
+AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "MONTH", "targetMonth": 1, "targetYear": 2026 }, "message": "Consultando agenda de Janeiro..." }
 `;
 
 export async function processCommand(input: string, history: string[] = []): Promise<AIResponse> {
-  if (!apiKey) {
+  const apiKeys = getApiKeys();
+
+  if (apiKeys.length === 0) {
     return {
       intent: 'UNKNOWN',
-      message: "Erro: Chave da API do Gemini não configurada.",
+      message: "Erro: Nenhuma chave da API do Gemini configurada.",
       confidence: 0
     };
   }
 
-  // O usuário confirmou que a chave é específica para o Gemini 2.5 Flash.
-  const modelName = "gemini-2.5-flash";
+  const targetModel = "gemini-2.5-flash";
+  let lastError: any = null;
 
-  try {
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: SYSTEM_INSTRUCTION
-    });
+  for (const [index, apiKey] of apiKeys.entries()) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: targetModel,
+        systemInstruction: SYSTEM_INSTRUCTION
+      });
 
-    // Construct prompt with history and time context
-    const now = new Date();
-    const timeContext = `Contexto Temporal: Hoje é ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}. Dia da semana: ${now.toLocaleDateString('pt-BR', { weekday: 'long' })}.`;
+      const now = new Date();
+      const timeContext = `Contexto Temporal: Hoje é ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}. Dia da semana: ${now.toLocaleDateString('pt-BR', { weekday: 'long' })}.`;
 
-    let prompt = `${timeContext}\n\n`;
-    if (history.length > 0) {
-      prompt += "Histórico da conversa:\n";
-      history.forEach(msg => prompt += `${msg}\n`);
-      prompt += "\nNova mensagem do usuário:\n";
-    }
-    prompt += input;
+      let prompt = `${timeContext}\n\n`;
+      if (history.length > 0) {
+        prompt += "Histórico da conversa:\n";
+        history.forEach(msg => prompt += `${msg}\n`);
+        prompt += "\nNova mensagem do usuário:\n";
+      }
+      prompt += input;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
 
-    // Limpar markdown se houver (```json ... ```)
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanText);
 
-    const parsed = JSON.parse(cleanText);
-
-    return {
-      intent: parsed.intent as IntentType,
-      data: parsed.data,
-      message: parsed.message || "Comando processado.",
-      confidence: 0.9
-    };
-
-  } catch (error: any) {
-    console.error("=== ERRO GEMINI AI ===");
-    console.error("Modelo:", modelName);
-    console.error("Erro:", error.message);
-    console.error("======================");
-
-    if (error.message?.includes('429') || error.message?.includes('Quota exceeded')) {
       return {
-        intent: 'UNKNOWN',
-        message: "⚠️ Limite de uso da IA atingido (Erro 429). Aguarde alguns instantes e tente novamente.",
-        confidence: 0
+        intent: parsed.intent as IntentType,
+        data: parsed.data,
+        message: parsed.message || "Comando processado.",
+        confidence: 0.9
       };
-    }
 
+    } catch (error: any) {
+      console.warn(`⚠️ Falha na Chave ${index + 1} (${apiKey.substring(0, 5)}...): ${error.message}`);
+      lastError = error;
+      continue;
+    }
+  }
+
+  console.error("=== TODAS AS CHAVES FALHARAM ===");
+  console.error("Último erro:", lastError?.message);
+
+  if (lastError?.message?.includes('429') || lastError?.message?.includes('Quota exceeded')) {
     return {
       intent: 'UNKNOWN',
-      message: `Erro técnico: ${error.message || "Problema desconhecido"}`,
+      message: "⚠️ Todas as chaves de API atingiram o limite. Tente novamente mais tarde.",
       confidence: 0
     };
   }
+
+  return {
+    intent: 'UNKNOWN',
+    message: `Erro técnico: ${lastError?.message || "Problema desconhecido"}`,
+    confidence: 0
+  };
 }

@@ -8,6 +8,7 @@ import { DataManager } from "../lib/data-manager";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { checkAndIncrementUsage, getDailyUsage } from "../actions/usage";
 
 type Message = {
     id: string;
@@ -30,8 +31,22 @@ export default function CommandCenter() {
     ]);
     const [conversationState, setConversationState] = useState<ConversationState>({ type: 'IDLE' });
     const [isProcessing, setIsProcessing] = useState(false);
+    const [usageCount, setUsageCount] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        getDailyUsage().then(setUsageCount);
+    }, []);
+
+    // Auto-resize textarea
+    useEffect(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+        }
+    }, [input]);
     const router = useRouter();
 
     const { isListening, transcript, startListening, stopListening, isSupported } = useSpeechRecognition();
@@ -56,7 +71,7 @@ export default function CommandCenter() {
             }
         };
         checkUser();
-        inputRef.current?.focus();
+        textareaRef.current?.focus();
     }, [router]);
 
     const handleLogout = async () => {
@@ -73,10 +88,24 @@ export default function CommandCenter() {
         }]);
     };
 
+    const checkLimit = async () => {
+        const usage = await checkAndIncrementUsage();
+        setUsageCount(usage.count);
+
+        if (!usage.allowed) {
+            addMessage('assistant', `🛑 Você atingiu seu limite diário de 10 interações.`, 'error');
+            addMessage('assistant', `Que tal fazer um upgrade para o plano PRO? Assim você tem acesso ilimitado e seu negócio não para! 🚀`, 'text');
+            setConversationState({ type: 'IDLE' });
+            return false;
+        }
+        return true;
+    };
+
     const processAIResponse = async (userInput: string) => {
         // 1. Handle State Machine Logic (Client-Side Interception)
         if (conversationState.type === 'CONFIRM_ADD_CLIENT' || conversationState.type === 'CONFIRM_ACTION') {
             if (userInput.toLowerCase().match(/^(sim|s|pode|claro|ok|confirmo)/)) {
+                if (!await checkLimit()) return;
 
                 if (conversationState.type === 'CONFIRM_ACTION') {
                     // User confirmed generic action (schedule, sale, etc)
@@ -345,6 +374,8 @@ export default function CommandCenter() {
             // Update transaction data with the provided payment method
             const updatedTransactionData = { ...transactionData, paymentMethod };
 
+            if (!await checkLimit()) return;
+
             try {
                 const clients = await DataManager.getClients();
                 const client = clients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
@@ -385,6 +416,8 @@ export default function CommandCenter() {
             const service = userInput;
             const { scheduleData, clientName } = conversationState.data;
             const updatedScheduleData = { ...scheduleData, service };
+
+            if (!await checkLimit()) return;
 
             try {
                 const clients = await DataManager.getClients();
@@ -537,6 +570,7 @@ export default function CommandCenter() {
                     break;
 
                 case 'ADD_CLIENT':
+                    if (!await checkLimit()) break;
                     if (response.data?.name) {
                         await DataManager.addClient({ name: response.data.name });
                         addMessage('assistant', response.message, 'success');
@@ -544,6 +578,7 @@ export default function CommandCenter() {
                     break;
 
                 case 'DELETE_CLIENT':
+                    if (!await checkLimit()) break;
                     if (response.data?.name) {
                         const removed = await DataManager.removeClient(response.data.name);
                         if (removed) addMessage('assistant', response.message, 'success');
@@ -552,12 +587,14 @@ export default function CommandCenter() {
                     break;
 
                 case 'LIST_CLIENTS':
+                    if (!await checkLimit()) break;
                     const clients = await DataManager.getClients();
                     if (clients.length === 0) addMessage('assistant', "Nenhuma cliente cadastrada.", 'text');
                     else addMessage('assistant', `Clientes: ${clients.map(c => c.name).join(", ")}`, 'text');
                     break;
 
                 case 'REGISTER_EXPENSE':
+                    if (!await checkLimit()) break;
                     await DataManager.addTransaction({
                         type: 'expense',
                         amount: response.data.amount,
@@ -567,9 +604,94 @@ export default function CommandCenter() {
                     break;
 
                 case 'DELETE_LAST_ACTION':
+                    if (!await checkLimit()) break;
                     const deleted = await DataManager.deleteLastAction();
                     if (deleted) addMessage('assistant', "Último registro apagado com sucesso.", 'success');
                     else addMessage('assistant', "Não encontrei nada recente para apagar.", 'error');
+                    break;
+
+                case 'REPORT':
+                    if (!await checkLimit()) break;
+                    const { entity, metric, period, filter } = response.data;
+                    const today = new Date();
+
+                    if (entity === 'APPOINTMENT') {
+                        const appointments = await DataManager.getAppointments();
+                        const filtered = appointments.filter(a => {
+                            const d = new Date(a.date_time);
+                            if (period === 'TODAY') return d.toDateString() === today.toDateString();
+                            if (period === 'MONTH') {
+                                const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
+                                const targetY = response.data.targetYear || today.getFullYear();
+                                return d.getMonth() === targetM && d.getFullYear() === targetY;
+                            }
+                            return true;
+                        });
+
+                        if (metric === 'COUNT') {
+                            addMessage('assistant', `Você tem ${filtered.length} agendamentos.`, 'text');
+                        } else {
+                            if (filtered.length === 0) addMessage('assistant', "Nada agendado para este período.", 'text');
+                            else {
+                                const list = filtered.map(a => {
+                                    const d = new Date(a.date_time);
+                                    const isToday = d.toDateString() === today.toDateString();
+                                    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                    const dateStr = isToday ? time : `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${time}`;
+                                    return `• ${dateStr} - ${a.client?.name || 'Cliente'} (${a.description})`;
+                                }).join('\n');
+                                addMessage('assistant', `Agenda:\n${list}`, 'text');
+                            }
+                        }
+                    }
+                    else if (entity === 'FINANCIAL') {
+                        const records = await DataManager.getFinancialSummary();
+                        const filtered = records.filter(r => {
+                            const d = new Date(r.created_at);
+                            if (period === 'TODAY') return d.toDateString() === today.toDateString();
+                            if (period === 'MONTH') {
+                                const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
+                                const targetY = response.data.targetYear || today.getFullYear();
+                                return d.getMonth() === targetM && d.getFullYear() === targetY;
+                            }
+                            return true;
+                        });
+
+                        const typeFilter = filter ? filter.toLowerCase() : null;
+                        const finalRecords = typeFilter ? filtered.filter(r => r.type === typeFilter) : filtered;
+
+                        const total = finalRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+
+                        const label = typeFilter === 'income' ? 'Ganhos' : typeFilter === 'expense' ? 'Gastos' : 'Total';
+                        const periodLabel = period === 'TODAY' ? 'de hoje' : period === 'MONTH' ? 'deste mês' : 'total';
+                        addMessage('assistant', `${label} ${periodLabel}: R$ ${total.toFixed(2)}`, 'text');
+                    }
+                    else if (entity === 'CLIENT' && metric === 'BEST') {
+                        const records = await DataManager.getFinancialSummary();
+                        const income = records.filter(r => r.type === 'income');
+                        const totals: Record<string, number> = {};
+
+                        income.forEach(r => {
+                            const name = r.client?.name || 'Desconhecido';
+                            totals[name] = (totals[name] || 0) + Number(r.amount);
+                        });
+
+                        let bestClient = '';
+                        let maxAmount = 0;
+
+                        Object.entries(totals).forEach(([name, amount]) => {
+                            if (amount > maxAmount) {
+                                maxAmount = amount;
+                                bestClient = name;
+                            }
+                        });
+
+                        if (bestClient) {
+                            addMessage('assistant', `Melhor cliente (baseado nos últimos registros): ${bestClient} (R$ ${maxAmount.toFixed(2)})`, 'text');
+                        } else {
+                            addMessage('assistant', "Não tenho dados suficientes para determinar o melhor cliente.", 'text');
+                        }
+                    }
                     break;
 
                 case 'RISKY_ACTION':
@@ -642,6 +764,10 @@ export default function CommandCenter() {
                         <p className="text-xs text-neutral-500 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                             Online
+                            <span className="mx-1 text-neutral-700">•</span>
+                            <span className={usageCount >= 10 ? "text-red-400" : "text-neutral-400"}>
+                                {Math.max(0, 10 - usageCount)} restantes
+                            </span>
                         </p>
                     </div>
                 </div>
@@ -696,41 +822,47 @@ export default function CommandCenter() {
 
             {/* Input Area */}
             <div className="p-4 bg-neutral-900 border-t border-neutral-800">
-                <div className="relative flex items-center gap-2">
-                    <input
-                        type="text"
+                <div className="flex items-end gap-2">
+                    <textarea
+                        ref={textareaRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
                         placeholder={isListening ? "Ouvindo..." : "Digite ou fale um comando..."}
-                        className="flex-1 bg-neutral-800 border-neutral-700 text-neutral-200 placeholder:text-neutral-600 rounded-xl pl-4 pr-12 py-3 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none"
+                        className="flex-1 bg-neutral-800 border-neutral-700 text-neutral-200 placeholder:text-neutral-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none resize-none min-h-[48px] max-h-[120px] scrollbar-thin scrollbar-thumb-neutral-600"
                         disabled={isProcessing}
+                        rows={1}
                     />
 
-                    <div className="absolute right-2 flex items-center gap-1">
+                    <div className="flex items-center gap-2 pb-1">
                         <button
                             onClick={isListening ? stopListening : startListening}
                             className={cn(
-                                "p-2 rounded-lg transition-all duration-300",
+                                "p-3 rounded-xl transition-all duration-300",
                                 isListening
                                     ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 animate-pulse"
-                                    : "hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200"
+                                    : "bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200 border border-neutral-700"
                             )}
                             title="Usar voz"
                         >
-                            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                         </button>
                         <button
                             onClick={() => handleSubmit(new Event('submit') as any)}
                             disabled={!input.trim() || isProcessing}
-                            className="p-2 hover:bg-neutral-700 text-neutral-400 hover:text-blue-400 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 shadow-lg shadow-blue-500/20 disabled:shadow-none"
                         >
-                            <Send className="w-4 h-4" />
+                            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                         </button>
                     </div>
                 </div>
                 <p className="text-[10px] text-center text-neutral-600 mt-2">
-                    Pressione Enter para enviar
+                    Enter para enviar • Shift + Enter para quebrar linha
                 </p>
             </div>
         </div>

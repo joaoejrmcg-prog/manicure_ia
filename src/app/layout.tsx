@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import ClientLayout from "./components/ClientLayout";
+import TermsModal from "./components/TermsModal";
 
 export default function RootLayout({
   children,
@@ -30,6 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-neutral-950 text-neutral-100`}
       >
         <ClientLayout>
+          <TermsModal />
           {children}
         </ClientLayout>
       </body>

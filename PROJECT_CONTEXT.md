@@ -57,41 +57,49 @@ A interface principal é um **Chat via IA** que atua como uma secretária eficie
 
 ---
 
-## 💳 REGRAS DE NEGÓCIO: ASSINATURAS & PAGAMENTOS
-**Conceito:** "Pagamento gera tempo de acesso."
+## 💳 REGRAS DE NEGÓCIO: PLANOS & LIMITES
 
-1.  **Estados da Assinatura (`status`):**
-    - `trial`: Acesso total por X dias.
-    - `active`: Pagamento em dia. Acesso total.
-    - `overdue`: Vencido. Bloqueio progressivo.
-    - `canceled`: Sem acesso.
+1.  **Tipos de Plano (`plan`):**
+    -   `vip`: Amigos/Parceiros. Acesso Vitalício. **IA Ilimitada**.
+    -   `pro`: Assinatura Premium. **IA Ilimitada**.
+    -   `light`: Assinatura Básica. **IA Limitada (10/dia)**.
+    -   `trial`: Período de testes (7 dias). **IA Ilimitada**.
 
-2.  **Lógica de Renovação (Webhook Asaas):**
-    - **Pagamento Antecipado:** Soma 30 dias à data de vencimento atual (`current_period_end`).
-    - **Pagamento Vencido:** Reseta a data para `NOW()` + 30 dias.
+2.  **Estados da Assinatura (`status`):**
+    -   `active`: Pagamento em dia (ou VIP/Trial).
+    -   `overdue`: Vencido. Bloqueio de novas ações após X dias.
+    -   `canceled`: Cancelado. Acesso revogado.
 
-3.  **Bloqueio Progressivo (`access_level`):**
-    - Nível 3 (Total): Cria, Edita, Vê.
-    - Nível 2 (Inadimplência Leve): Vê, Edita, mas NÃO CRIA novos.
-    - Nível 1 (Bloqueio Forte): Apenas Vê (Read-Only).
-    - Nível 0: Bloqueio de Login.
+3.  **Logica de Bloqueio (Tiered Blocking):**
+    -   **1 dia atraso:** IA Bloqueada (Status: `overdue`).
+    -   **> 7 dias atraso:** Bloqueio de Escrita (Read-Only).
+    -   **Cancelado:** Bloqueio Total imediato.
+
+4.  **Limites de Uso (IA):**
+    -   `vip` / `pro` / `trial`: Ilimitado.
+    -   `light`: 10 interações/dia.
 
 ---
 
 ## 🚀 ROADMAP DE IMPLEMENTAÇÃO (ORDEM DE EXECUÇÃO)
 
-### FASE 1: Segurança & Auditoria (Prioridade Imediata)
-- [ ] Auditar todas as funções existentes de DB para garantir `WHERE user_id = auth.uid()`.
-- [ ] Garantir que RLS esteja ativo no Supabase.
+### FASE 1: Segurança & Auditoria ✅ COMPLETA
+- [x] Auditar todas as funções existentes de DB para garantir `WHERE user_id = auth.uid()`.
+- [x] Garantir que RLS esteja ativo no Supabase.
 
-### FASE 2: Refinamento da IA (UX)
-- [ ] Implementar o "Confirmation Loop" no prompt do sistema.
-- [ ] Criar Hook `useSpeechRecognition` (Web Speech API).
+### FASE 2: Refinamento da IA (UX) ✅ COMPLETA
+- [x] Implementar o "Confirmation Loop" no prompt do sistema (`CommandCenter.tsx` com `CONFIRMATION_REQUIRED`).
+- [x] Criar Hook `useSpeechRecognition` (Web Speech API nativa do navegador).
 
-### FASE 3: Camada de Pagamento (Sidecar)
-- [ ] Criar tabela `subscriptions`.
-- [ ] Criar Middleware no Next.js que verifica `subscriptions.status` antes de carregar a IA.
+### FASE 3: Camada de Pagamento (Sidecar) ✅ COMPLETA
+- [x] Criar tabela `subscriptions` no Supabase.
+- [x] Implementar lógica de verificação de planos e limites (`usage.ts`, `subscription.ts`).
+- [x] Sistema de bloqueio baseado em status (overdue, canceled) e planos (vip, pro, light, trial).
 - [ ] Implementar Webhook do Asaas (Edge Function) para renovar tempo automaticamente.
 
-### FASE 4: Indicação (Growth)
-- [ ] Implementar lógica de Referral: Quem indica ganha dias extras APÓS o indicado pagar o primeiro boleto.
+### FASE 4: Indicação (Growth) ✅ COMPLETA
+- [x] Criar tabela `referral_rewards` para rastrear recompensas concedidas.
+- [x] Implementar Server Actions para processar recompensas (`referral.ts`).
+- [x] Atualizar UI da página `/indique` para mostrar indicados pagantes vs cadastrados.
+- [x] Criar painel admin para confirmar primeiro pagamento manualmente (MVP).
+- [ ] Implementar Webhook do Asaas para automação completa (Futuro).

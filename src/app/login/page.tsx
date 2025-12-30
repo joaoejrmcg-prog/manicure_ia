@@ -1,17 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, ArrowRight } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mode, setMode] = useState<'login' | 'signup'>('login');
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const referralCode = searchParams.get('ref');
+
+    useEffect(() => {
+        if (referralCode) {
+            setMode('signup');
+        }
+    }, [referralCode]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,6 +31,11 @@ export default function LoginPage() {
                 const { error } = await supabase.auth.signUp({
                     email,
                     password,
+                    options: {
+                        data: {
+                            referral_code: referralCode
+                        }
+                    }
                 });
                 if (error) throw error;
                 alert("Cadastro realizado! Verifique seu email ou faça login.");
@@ -63,6 +76,12 @@ export default function LoginPage() {
                         </p>
                     </div>
 
+                    {referralCode && mode === 'signup' && (
+                        <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-xs p-3 rounded-lg text-center mb-6 animate-pulse">
+                            🎉 Código de indicação aplicado!
+                        </div>
+                    )}
+
                     <form onSubmit={handleAuth} className="space-y-4">
                         <div className="space-y-1">
                             <label className="text-xs font-medium text-neutral-400 ml-1">Email</label>
@@ -85,6 +104,11 @@ export default function LoginPage() {
                                 className="w-full p-3 bg-neutral-950/50 border border-neutral-800 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-600"
                                 required
                             />
+                        </div>
+                        <div className="flex justify-end">
+                            <a href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                                Esqueci minha senha
+                            </a>
                         </div>
 
                         {error && (
@@ -124,5 +148,13 @@ export default function LoginPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-neutral-950 flex items-center justify-center"><Loader2 className="text-blue-500 animate-spin" /></div>}>
+            <LoginForm />
+        </Suspense>
     );
 }

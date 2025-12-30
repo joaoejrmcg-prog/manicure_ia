@@ -19,7 +19,7 @@ function DashboardContent() {
 
           <div className="relative z-10 max-w-lg w-full space-y-8">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
                 <Sparkles className="w-3 h-3" />
                 <span>IA Ativa e Pronta</span>
               </div>
@@ -48,8 +48,8 @@ function DashboardContent() {
             </span>
           </div>
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between">
-            <span className="text-xs text-neutral-500">Novas Clientes</span>
-            <span className="text-2xl font-bold text-purple-400">{metrics.newClientsMonth}</span>
+            <span className="text-xs text-neutral-500">Novos Clientes</span>
+            <span className="text-2xl font-bold text-blue-400">{metrics.newClientsMonth}</span>
           </div>
         </div>
       </div>

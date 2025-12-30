@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, DollarSign, Settings, LogOut, X, Calendar } from "lucide-react";
+import { Home, Users, DollarSign, Settings, LogOut, X, Calendar, Gift, HelpCircle } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { cn } from "../lib/utils";
@@ -27,7 +27,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         { icon: Calendar, label: "Agenda", href: "/agenda" },
         { icon: Users, label: "Clientes", href: "/clients" },
         { icon: DollarSign, label: "Financeiro", href: "/financial" },
-        { icon: Settings, label: "Configurações", href: "/settings" },
     ];
 
     return (
@@ -81,6 +80,49 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         );
                     })}
                 </nav>
+
+                {/* Quick Actions */}
+                <div className="px-4 pb-4 space-y-2">
+                    <Link
+                        href="/ajuda"
+                        onClick={() => onClose?.()}
+                        className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                            pathname === "/ajuda"
+                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                        )}
+                    >
+                        <HelpCircle className="w-5 h-5" />
+                        <span className="font-medium">Ajuda</span>
+                    </Link>
+                    <Link
+                        href="/perfil"
+                        onClick={() => onClose?.()}
+                        className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                            pathname === "/perfil"
+                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                        )}
+                    >
+                        <Settings className="w-5 h-5" />
+                        <span className="font-medium">Perfil</span>
+                    </Link>
+                    <Link
+                        href="/indique"
+                        onClick={() => onClose?.()}
+                        className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 border",
+                            pathname === "/indique"
+                                ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                : "text-blue-400 border-blue-500/20 hover:bg-blue-500/10"
+                        )}
+                    >
+                        <Gift className="w-5 h-5" />
+                        <span className="font-medium">Indicar Amigos</span>
+                    </Link>
+                </div>
 
                 <div className="p-4 border-t border-neutral-800">
                     <button

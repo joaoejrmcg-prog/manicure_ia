@@ -1,8 +1,12 @@
 import { supabase } from "./supabase";
 import { Client, Appointment, FinancialRecord } from "../types";
+import { checkWritePermission } from "../actions/subscription";
 
 export const DataManager = {
     addClient: async (clientData: Partial<Client> & { name: string }) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -17,6 +21,9 @@ export const DataManager = {
     },
 
     updateClient: async (id: string, updates: Partial<Client>) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -33,6 +40,9 @@ export const DataManager = {
     },
 
     removeClient: async (idOrName: string) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         // Tenta remover por ID primeiro (UUID), se falhar tenta por nome (legacy/AI)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrName);
 
@@ -43,6 +53,10 @@ export const DataManager = {
         } else {
             query.ilike('name', idOrName);
         }
+
+        // Security: Ensure we only delete client belonging to user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) query.eq('user_id', user.id);
 
         const { data, error } = await query.select();
 
@@ -65,6 +79,9 @@ export const DataManager = {
     },
 
     addAppointment: async (clientId: string, date: Date, description: string) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -84,6 +101,9 @@ export const DataManager = {
     },
 
     updateAppointment: async (id: string, updates: Partial<Appointment>) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -111,8 +131,6 @@ export const DataManager = {
 
         if (error) throw error;
         return data as Appointment[];
-        if (error) throw error;
-        return data as Appointment[];
     },
 
     findNextAppointment: async (clientId: string) => {
@@ -136,16 +154,26 @@ export const DataManager = {
     },
 
     cancelAppointment: async (appointmentId: string) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
         const { error } = await supabase
             .from('appointments')
             .delete()
-            .eq('id', appointmentId);
+            .eq('id', appointmentId)
+            .eq('user_id', user.id);
 
         if (error) throw error;
         return true;
     },
 
     addTransaction: async (transactionData: Partial<FinancialRecord>) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -160,6 +188,9 @@ export const DataManager = {
     },
 
     updateTransaction: async (id: string, updates: Partial<FinancialRecord>) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -176,6 +207,9 @@ export const DataManager = {
     },
 
     deleteTransaction: async (id: string) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
@@ -199,13 +233,16 @@ export const DataManager = {
             .select('*, client:clients(name)')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .limit(50);
+            .limit(500);
 
         if (error) throw error;
         return data as FinancialRecord[];
     },
 
     deleteLastAction: async () => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 

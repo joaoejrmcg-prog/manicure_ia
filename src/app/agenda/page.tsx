@@ -377,7 +377,7 @@ export default function AgendaPage() {
                                     type="text"
                                     value={formData.description}
                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    placeholder="Ex: Manicure e Pedicure"
+                                    placeholder="Ex: Corte de cabelo, Instalação elétrica"
                                     className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-2.5 text-neutral-200 focus:ring-2 focus:ring-blue-500/50 outline-none"
                                 />
                             </div>
