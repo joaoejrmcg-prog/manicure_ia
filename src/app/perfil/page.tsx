@@ -119,58 +119,59 @@ export default async function PerfilPage() {
                             <CancelSubscription />
                         </div>
                     )}
+                </div>
 
-                    {/* Grid de Ações */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <Link
-                            href="/planos"
-                            className="bg-white p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center gap-2 text-center border-2 border-transparent hover:border-blue-500"
-                        >
-                            <CreditCard className="text-blue-500" size={32} />
-                            <span className="font-semibold text-gray-800">Mudar Plano</span>
-                        </Link>
+                {/* Grid de Ações */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    <Link
+                        href="/planos"
+                        className="bg-white p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center gap-2 text-center border-2 border-transparent hover:border-blue-500"
+                    >
+                        <CreditCard className="text-blue-500" size={32} />
+                        <span className="font-semibold text-gray-800">Mudar Plano</span>
+                    </Link>
 
-                        <Link
-                            href="/indique"
-                            className="bg-gradient-to-br from-blue-600 to-indigo-600 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center gap-2 text-center text-white"
-                        >
-                            <Gift size={32} />
-                            <span className="font-semibold">Indicar Amigos</span>
-                        </Link>
-                    </div>
+                    <Link
+                        href="/indique"
+                        className="bg-gradient-to-br from-blue-600 to-indigo-600 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center gap-2 text-center text-white"
+                    >
+                        <Gift size={32} />
+                        <span className="font-semibold">Indicar Amigos</span>
+                    </Link>
+                </div>
 
-                    {/* Informações do Usuário */}
-                    <div className="bg-white rounded-2xl shadow-sm p-6 mb-4">
-                        <h2 className="text-lg font-semibold text-gray-800 mb-4">Informações</h2>
-                        <div className="space-y-3">
+                {/* Informações do Usuário */}
+                <div className="bg-white rounded-2xl shadow-sm p-6 mb-4">
+                    <h2 className="text-lg font-semibold text-gray-800 mb-4">Informações</h2>
+                    <div className="space-y-3">
+                        <div>
+                            <p className="text-sm text-gray-500">Email</p>
+                            <p className="font-medium text-gray-800">{profile.email}</p>
+                        </div>
+                        {profile.whatsapp && (
                             <div>
-                                <p className="text-sm text-gray-500">Email</p>
-                                <p className="font-medium text-gray-800">{profile.email}</p>
+                                <p className="text-sm text-gray-500">WhatsApp</p>
+                                <p className="font-medium text-gray-800">{profile.whatsapp}</p>
                             </div>
-                            {profile.whatsapp && (
-                                <div>
-                                    <p className="text-sm text-gray-500">WhatsApp</p>
-                                    <p className="font-medium text-gray-800">{profile.whatsapp}</p>
-                                </div>
-                            )}
-                            <div>
-                                <p className="text-sm text-gray-500">Código de Indicação</p>
-                                <p className="font-mono font-bold text-blue-500">{profile.referralCode}</p>
-                            </div>
+                        )}
+                        <div>
+                            <p className="text-sm text-gray-500">Código de Indicação</p>
+                            <p className="font-mono font-bold text-blue-500">{profile.referralCode}</p>
                         </div>
                     </div>
-
-                    {/* Botão Sair */}
-                    <form action={handleLogout}>
-                        <button
-                            type="submit"
-                            className="w-full bg-white text-red-500 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center gap-2 font-semibold border-2 border-transparent hover:border-red-500"
-                        >
-                            <LogOut size={20} />
-                            Sair da Conta
-                        </button>
-                    </form>
                 </div>
+
+                {/* Botão Sair */}
+                <form action={handleLogout}>
+                    <button
+                        type="submit"
+                        className="w-full bg-white text-red-500 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center gap-2 font-semibold border-2 border-transparent hover:border-red-500"
+                    >
+                        <LogOut size={20} />
+                        Sair da Conta
+                    </button>
+                </form>
             </div>
-            );
+        </div>
+    );
 }
