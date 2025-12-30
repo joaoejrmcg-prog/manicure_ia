@@ -797,7 +797,7 @@ export default function CommandCenter() {
                     >
                         <div
                             className={cn(
-                                "max-w-[80%] rounded-2xl px-4 py-3 text-sm",
+                                "max-w-[80%] rounded-2xl px-4 py-3 text-lg",
                                 msg.role === 'user'
                                     ? "bg-blue-600 text-white rounded-tr-none"
                                     : cn(

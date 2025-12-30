@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, DollarSign, Settings, LogOut, X, Calendar, Gift, HelpCircle } from "lucide-react";
+import { Home, Users, DollarSign, Settings, LogOut, X, Calendar, Gift, HelpCircle, LayoutDashboard } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { cn } from "../lib/utils";
@@ -24,6 +24,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
     const menuItems = [
         { icon: Home, label: "Início", href: "/" },
+        { icon: LayoutDashboard, label: "Visão Geral", href: "/dashboard" },
         { icon: Calendar, label: "Agenda", href: "/agenda" },
         { icon: Users, label: "Clientes", href: "/clients" },
         { icon: DollarSign, label: "Financeiro", href: "/financial" },

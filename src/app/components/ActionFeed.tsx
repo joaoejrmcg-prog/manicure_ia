@@ -9,7 +9,8 @@ type ActionItem = {
     type: 'appointment' | 'transaction';
     title: string;
     subtitle: string;
-    date: Date;
+    displayDate: Date;
+    createdAt: Date;
     amount?: number;
 };
 
@@ -32,7 +33,8 @@ export default function ActionFeed() {
                     type: 'appointment',
                     title: `Agendamento: ${app.description}`,
                     subtitle: app.client?.name || 'Cliente',
-                    date: new Date(app.date_time)
+                    displayDate: new Date(app.date_time),
+                    createdAt: new Date(app.created_at || app.date_time) // Fallback if created_at missing
                 });
             });
 
@@ -42,13 +44,14 @@ export default function ActionFeed() {
                     type: 'transaction',
                     title: fin.type === 'income' ? 'Venda Registrada' : 'Despesa Registrada',
                     subtitle: `${fin.description} - ${fin.client?.name || ''}`,
-                    date: new Date(fin.created_at),
+                    displayDate: new Date(fin.created_at),
+                    createdAt: new Date(fin.created_at),
                     amount: fin.amount
                 });
             });
 
-            // Sort by date desc
-            items.sort((a, b) => b.date.getTime() - a.date.getTime());
+            // Sort by CREATED_AT desc (most recent action first)
+            items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
             if (items.length > 0) {
                 setLastAction(items[0]);
@@ -86,7 +89,7 @@ export default function ActionFeed() {
             </div>
             <div className="text-right">
                 <span className="text-xs text-neutral-500 block">
-                    {lastAction.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {lastAction.displayDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
                 {lastAction.amount && (
                     <span className="text-sm font-bold text-emerald-400">

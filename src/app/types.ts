@@ -14,6 +14,7 @@ export interface Appointment {
     date_time: string; // ISO string
     description: string;
     notes?: string;
+    created_at?: string;
     client?: Client; // Joined data
 }
 
