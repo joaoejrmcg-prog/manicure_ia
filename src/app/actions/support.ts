@@ -47,3 +47,23 @@ export async function sendSupportMessage(formData: FormData) {
 
     return { success: true };
 }
+export async function getUserMessages() {
+    try {
+        const supabase = await getSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) return [];
+
+        const { data, error } = await supabase
+            .from('support_messages')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error fetching user messages:", error);
+        return [];
+    }
+}

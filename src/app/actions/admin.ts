@@ -49,13 +49,19 @@ export async function getSupportMessages() {
     }
 }
 
-export async function markAsReplied(id: string) {
+export async function markAsReplied(id: string, replyText?: string) {
     try {
         const supabase = await checkAdmin();
 
+        const updateData: any = { status: 'replied' };
+        if (replyText) {
+            updateData.admin_reply = replyText;
+            updateData.replied_at = new Date().toISOString();
+        }
+
         const { error } = await supabase
             .from('support_messages')
-            .update({ status: 'replied' })
+            .update(updateData)
             .eq('id', id);
 
         if (error) throw error;

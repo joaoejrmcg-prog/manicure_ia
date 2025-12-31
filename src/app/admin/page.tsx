@@ -40,6 +40,8 @@ export default function AdminPage() {
         checkAuth();
     }, []);
 
+    const [replies, setReplies] = useState<{ [key: string]: string }>({});
+
     const fetchMessages = async () => {
         setLoading(true);
         const data = await getSupportMessages();
@@ -48,8 +50,18 @@ export default function AdminPage() {
     };
 
     const handleMarkReplied = async (id: string) => {
-        await markAsReplied(id);
+        const replyText = replies[id];
+        await markAsReplied(id, replyText);
+        setReplies(prev => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
         fetchMessages(); // Refresh
+    };
+
+    const handleReplyChange = (id: string, text: string) => {
+        setReplies(prev => ({ ...prev, [id]: text }));
     };
 
     const filteredMessages = filter === 'all'
@@ -152,15 +164,40 @@ export default function AdminPage() {
                                 {msg.message}
                             </div>
 
-                            <div className="mt-4 flex justify-end">
-                                <a
-                                    href={`mailto:${msg.user_email}?subject=Re: ${msg.subject}`}
-                                    className="text-sm text-neutral-500 hover:text-white flex items-center gap-1 transition-colors"
-                                >
-                                    <Mail className="w-4 h-4" />
-                                    Responder via Email
-                                </a>
-                            </div>
+                            {msg.status === 'pending' && (
+                                <div className="mt-4 space-y-2">
+                                    <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Sua Resposta (In-App)</label>
+                                    <textarea
+                                        value={replies[msg.id] || ''}
+                                        onChange={(e) => handleReplyChange(msg.id, e.target.value)}
+                                        placeholder="Digite sua resposta aqui..."
+                                        className="w-full p-3 bg-neutral-950 border border-neutral-800 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-600 min-h-[100px] text-sm"
+                                    />
+                                    <div className="flex justify-end gap-3">
+                                        <a
+                                            href={`mailto:${msg.user_email}?subject=Re: ${msg.subject}`}
+                                            className="text-sm text-neutral-500 hover:text-white flex items-center gap-1 transition-colors px-3 py-1.5"
+                                        >
+                                            <Mail className="w-4 h-4" />
+                                            Responder via Email
+                                        </a>
+                                        <button
+                                            onClick={() => handleMarkReplied(msg.id)}
+                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-lg shadow-blue-500/20"
+                                        >
+                                            <CheckCircle className="w-4 h-4" />
+                                            Enviar Resposta In-App
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {msg.status === 'replied' && (
+                                <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+                                    <p className="text-xs font-medium text-blue-400 uppercase tracking-wider mb-2">Sua Resposta</p>
+                                    <p className="text-sm text-neutral-300">{(msg as any).admin_reply || 'Marcado como respondido sem texto.'}</p>
+                                </div>
+                            )}
                         </div>
                     ))
                 )}
