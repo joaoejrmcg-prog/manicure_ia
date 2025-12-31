@@ -39,14 +39,19 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
 2. **INTENÇÕES (INTENTS):**
    - ADD_CLIENT: Cadastrar cliente. (Requer: name).
    - SCHEDULE_SERVICE: Agendar. (Requer: service, clientName, isoDate).
-     - "isoDate": Data e hora exata no formato ISO 8601 (ex: "2023-10-27T14:30:00"). Calcule com base no "Contexto Temporal" fornecido.
-     - Se o usuário for vago (ex: "semana que vem"), retorne "CONFIRMATION_REQUIRED" perguntando o dia e hora exatos.
-   - CANCEL_APPOINTMENT: Cancelar agendamento. (Requer: clientName).
+     - "isoDate": Data e hora exata no formato ISO 8601 (ex: "2023-10-27T14:30:00").
+     - **REGRA DE DATA (CRÍTICO):** Calcule a data com base no "Contexto Temporal".
+       - Se o usuário disser um dia da semana (ex: "Sexta"), refere-se à PRÓXIMA ocorrência desse dia. Se hoje é Quarta, "Sexta" é depois de amanhã.
+       - NÃO agende para hoje a menos que o usuário diga "Hoje".
+   - CANCEL_APPOINTMENT: Cancelar agendamento ESPECÍFICO. (Requer: clientName).
      - Gatilhos: "Raquel cancelou", "Desmarca a Maria", "Cancela o horário da Ana".
    - REGISTER_SALE: Registrar venda (Entrada). (Requer: service, clientName, amount, paymentMethod).
      - Gatilhos: "Recebi", "Pagou", "Cliente pagou", "Fiz a mão".
    - REGISTER_EXPENSE: Registrar despesa (Saída). (Requer: amount, description).
      - Gatilhos: "Paguei", "Comprei", "Gastei", "Conta de luz".
+   - DELETE_LAST_ACTION: Apagar o último registro feito (Desfazer).
+     - Gatilhos: "Apaga isso", "Desfaz", "Cancele o último", "Não era isso", "Me enganei", "Cancela", "Errei".
+     - Use isso quando o usuário parecer ter cometido um erro imediato após uma ação.
    - REPORT: Gerar relatórios ou consultas.
      - "data": { 
          "entity": "APPOINTMENT" | "FINANCIAL" | "CLIENT", 
@@ -76,7 +81,15 @@ AI: {
   "message": "Combinado. Agendei unha para Maria amanhã às 10h."
 }
 
-**Cenário 2: Venda sem forma de pagamento (Dado Faltante)**
+**Cenário 2: Correção Imediata (Desfazer)**
+User: "Me enganei, cancela"
+AI: {
+  "intent": "DELETE_LAST_ACTION",
+  "data": {},
+  "message": "Tudo bem, desfiz a última ação."
+}
+
+**Cenário 3: Venda sem forma de pagamento (Dado Faltante)**
 User: "A Maria pagou 50 reais na unha"
 AI: {
   "intent": "CONFIRMATION_REQUIRED",
@@ -84,11 +97,7 @@ AI: {
   "message": "Certo, R$ 50,00 da Maria. Qual foi a forma de pagamento?"
 }
 
-**Cenário 3: Diferença Venda vs Despesa**
-User: "Paguei 50 na luz" -> REGISTER_EXPENSE (Eu paguei)
-User: "Maria pagou 50" -> REGISTER_SALE (Cliente pagou)
-
-**Cenário 4: Agendamento em etapas (Slot Filling)**
+**Cenário 4: Agendamento em etapas**
 User: "Agenda o Valdir pra semana que vem"
 AI: { "intent": "CONFIRMATION_REQUIRED", "message": "Qual dia, horário e serviço?" }
 User: "terça as 10. Ele quer uma vistoria"
@@ -101,29 +110,6 @@ AI: {
   },
   "message": "Pronto. Agendei vistoria para Valdir na terça (07/11) às 10h."
 }
-
-**Cenário 5: Múltiplas Ações**
-User: "Cadastra o Felipe, marca ele pra terça às 10h e anota que ele já pagou 50 reais de sinal no pix"
-AI: {
-  "intent": "MULTI_ACTION",
-  "data": {
-    "actions": [
-      { "intent": "ADD_CLIENT", "data": { "name": "Felipe" } },
-      { "intent": "SCHEDULE_SERVICE", "data": { "clientName": "Felipe", "service": "Serviço Geral", "isoDate": "2023-12-30T10:00:00" } },
-      { "intent": "REGISTER_SALE", "data": { "clientName": "Felipe", "service": "Sinal", "amount": 50, "paymentMethod": "Pix" } }
-    ]
-  },
-  "message": "Feito! Cadastrei o Felipe, agendei para terça às 10h e registrei o pagamento de R$ 50."
-}
-
-**Cenário 6: Relatórios**
-User: "O que tem pra hoje?"
-AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "TODAY" }, "message": "Aqui está sua agenda de hoje:" }
-User: "Quanto ganhei hoje?"
-AI: { "intent": "REPORT", "data": { "entity": "FINANCIAL", "metric": "SUM", "period": "TODAY", "filter": "INCOME" }, "message": "Calculando ganhos de hoje..." }
-
-User: "Agenda de Janeiro"
-AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "MONTH", "targetMonth": 1, "targetYear": 2026 }, "message": "Consultando agenda de Janeiro..." }
 `;
 
 export async function processCommand(input: string, history: string[] = [], inputType: 'text' | 'voice' = 'text'): Promise<AIResponse> {
@@ -194,21 +180,26 @@ export async function processCommand(input: string, history: string[] = [], inpu
   // 2. Generate Audio with OpenAI (if voice input)
   let audioData: string | undefined = undefined;
 
-  if (inputType === 'voice' && parsedResponse.message) {
+  // 2. Generate Audio with OpenAI (if voice input)
+  const finalMessage = parsedResponse.message || "Comando processado.";
+
+  if (inputType === 'voice' && finalMessage) {
     if (!process.env.OPENAI_API_KEY) {
       console.warn("⚠️ OPENAI_API_KEY missing, skipping TTS generation.");
     } else {
       try {
+        console.log("🎙️ Gerando áudio OpenAI para:", finalMessage.substring(0, 50) + "...");
         const mp3 = await openai.audio.speech.create({
           model: "tts-1",
           voice: "nova",
-          input: parsedResponse.message,
+          input: finalMessage,
         });
 
         const buffer = Buffer.from(await mp3.arrayBuffer());
         audioData = buffer.toString('base64');
-      } catch (audioError) {
-        console.error("Error generating OpenAI audio:", audioError);
+        console.log("✅ Áudio gerado com sucesso. Tamanho:", audioData.length);
+      } catch (audioError: any) {
+        console.error("❌ Erro ao gerar áudio OpenAI:", audioError?.message || audioError);
         // Don't fail the whole request if audio fails
       }
     }
@@ -221,4 +212,22 @@ export async function processCommand(input: string, history: string[] = [], inpu
     confidence: 0.9,
     audio: audioData
   };
+}
+
+export async function generateAudio(text: string): Promise<string | null> {
+  if (!process.env.OPENAI_API_KEY) return null;
+
+  try {
+    const mp3 = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: "nova",
+      input: text,
+    });
+
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    return buffer.toString('base64');
+  } catch (error) {
+    console.error("Error generating system audio:", error);
+    return null;
+  }
 }

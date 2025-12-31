@@ -3,13 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, Send, Loader2, LogOut, Bot, User, MicOff, Sparkles } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { processCommand, generateAudio } from "../actions/ai";
+import { processCommand } from "../actions/ai";
 import { DataManager } from "../lib/data-manager";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { checkAndIncrementUsage, getDailyUsage } from "../actions/usage";
-import { VoiceOrb } from "./VoiceOrb";
 
 type Message = {
     id: string;
@@ -28,13 +27,11 @@ type ConversationState =
 export default function CommandCenter() {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<Message[]>([
-        { id: '1', role: 'assistant', content: 'Olá! Sou sua secretária. Vamos começar?' }
+        { id: '1', role: 'assistant', content: 'Olá! Sou sua secretária. Posso agendar um compromisso, lançar uma conta que você recebeu ou pagou e ainda cadastrar um cliente. Vamos começar?' }
     ]);
     const [conversationState, setConversationState] = useState<ConversationState>({ type: 'IDLE' });
     const [isProcessing, setIsProcessing] = useState(false);
     const [usageCount, setUsageCount] = useState(0);
-    const [inputType, setInputType] = useState<'text' | 'voice'>('text');
-    const [isSpeaking, setIsSpeaking] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -52,32 +49,13 @@ export default function CommandCenter() {
     }, [input]);
     const router = useRouter();
 
-    const { isListening, transcript, startListening, stopListening, isSupported, resetTranscript } = useSpeechRecognition();
+    const { isListening, transcript, startListening, stopListening, isSupported } = useSpeechRecognition();
 
     useEffect(() => {
         if (transcript) {
             setInput(transcript);
-            setInputType('voice');
         }
     }, [transcript]);
-
-    // Auto-send when listening stops
-    useEffect(() => {
-        if (!isListening && transcript && !isProcessing) {
-            const userInput = transcript;
-
-            const autoSend = async () => {
-                setInput("");
-                resetTranscript(); // Clear transcript to prevent double-send
-                addMessage('user', userInput);
-                setIsProcessing(true);
-                await processAIResponse(userInput);
-                setIsProcessing(false);
-            };
-
-            autoSend();
-        }
-    }, [isListening]); // Only trigger when isListening changes
 
     // Scroll to bottom on new message
     useEffect(() => {
@@ -93,6 +71,7 @@ export default function CommandCenter() {
             }
         };
         checkUser();
+        textareaRef.current?.focus();
     }, [router]);
 
     const handleLogout = async () => {
@@ -120,30 +99,6 @@ export default function CommandCenter() {
             return false;
         }
         return true;
-    };
-
-    const speak = async (text: string) => {
-        if (inputType !== 'voice') return;
-
-        try {
-            setIsSpeaking(true);
-            const audioData = await generateAudio(text);
-
-            if (audioData) {
-                const audio = new Audio(`data:audio/mp3;base64,${audioData}`);
-                await new Promise<void>((resolve) => {
-                    audio.onended = () => resolve();
-                    audio.play().catch(e => {
-                        console.error("Audio play error:", e);
-                        resolve();
-                    });
-                });
-            }
-        } catch (e) {
-            console.error("Error playing system audio:", e);
-        } finally {
-            setIsSpeaking(false);
-        }
     };
 
     const processAIResponse = async (userInput: string) => {
@@ -372,10 +327,7 @@ export default function CommandCenter() {
                             }
 
                             await DataManager.addAppointment(newClient.id, date, originalData.service);
-                            const dateStr = date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-                            const msg = `Agendado: ${originalData.service} para ${newClient.name} em ${dateStr}.`;
-                            addMessage('assistant', msg, 'success');
-                            await speak(msg);
+                            addMessage('assistant', `Agendado: ${originalData.service} para ${newClient.name} em ${date.toLocaleString()}.`, 'success');
                         }
                     } catch (resumptionError) {
                         console.error("Erro na retomada:", resumptionError);
@@ -482,8 +434,7 @@ export default function CommandCenter() {
                     }
 
                     await DataManager.addAppointment(client.id, date, updatedScheduleData.service);
-                    const dateStr = date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-                    addMessage('assistant', `Agendado: ${updatedScheduleData.service} para ${client.name} em ${dateStr}.`, 'success');
+                    addMessage('assistant', `Agendado: ${updatedScheduleData.service} para ${client.name} em ${date.toLocaleString()}.`, 'success');
                 } else {
                     // Client not found -> Trigger Add Client Flow
                     addMessage('assistant', `Não encontrei o cliente "${clientName}". Deseja cadastrá-lo agora?`);
@@ -511,26 +462,7 @@ export default function CommandCenter() {
         try {
             // Prepare history (last 10 messages)
             const history = messages.slice(-10).map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`);
-            const response = await processCommand(userInput, history, inputType);
-
-            if (response.audio) {
-                try {
-                    setIsSpeaking(true);
-                    const audio = new Audio(`data:audio/mp3;base64,${response.audio}`);
-
-                    await new Promise<void>((resolve) => {
-                        audio.onended = () => resolve();
-                        audio.play().catch(e => {
-                            console.error("Audio play error:", e);
-                            resolve(); // Resolve anyway to show text
-                        });
-                    });
-                } catch (e) {
-                    console.error("Error playing audio:", e);
-                } finally {
-                    setIsSpeaking(false);
-                }
-            }
+            const response = await processCommand(userInput, history);
 
             // Handle specific intents that require client-side logic
             switch (response.intent) {
@@ -820,7 +752,7 @@ export default function CommandCenter() {
     };
 
     return (
-        <div className="flex flex-col h-full bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-[600px] bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl">
             {/* Header */}
             <div className="p-4 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -865,7 +797,7 @@ export default function CommandCenter() {
                     >
                         <div
                             className={cn(
-                                "max-w-full md:max-w-[80%] rounded-2xl px-4 py-3 text-lg",
+                                "max-w-[80%] rounded-2xl px-4 py-3 text-lg",
                                 msg.role === 'user'
                                     ? "bg-blue-600 text-white rounded-tr-none"
                                     : cn(
@@ -894,10 +826,7 @@ export default function CommandCenter() {
                     <textarea
                         ref={textareaRef}
                         value={input}
-                        onChange={(e) => {
-                            setInput(e.target.value);
-                            setInputType('text');
-                        }}
+                        onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
@@ -936,9 +865,6 @@ export default function CommandCenter() {
                     Enter para enviar • Shift + Enter para quebrar linha
                 </p>
             </div>
-            {(isListening || (isProcessing && inputType === 'voice') || isSpeaking) && (
-                <VoiceOrb mode={isSpeaking ? 'SPEAKING' : (isProcessing ? 'PROCESSING' : 'LISTENING')} />
-            )}
         </div>
     );
 }
