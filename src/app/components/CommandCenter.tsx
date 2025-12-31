@@ -952,7 +952,7 @@ export default function CommandCenter() {
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                             Online
                             <span className="mx-1 text-neutral-700">•</span>
-                            {['vip', 'pro'].includes(userPlan) ? (
+                            {['vip', 'pro'].includes(userPlan.toLowerCase()) ? (
                                 <span className="text-blue-400 flex items-center gap-1">
                                     <Sparkles className="w-3 h-3" />
                                     Ilimitado

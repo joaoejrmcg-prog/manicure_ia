@@ -141,17 +141,28 @@ export default async function PerfilPage() {
                 </div>
 
                 {/* Informações do Usuário */}
-                {profile.whatsapp && (
-                    <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 mb-4">
-                        <h2 className="text-lg font-semibold text-neutral-200 mb-4">Informações</h2>
-                        <div className="space-y-3">
+                <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 mb-4">
+                    <h2 className="text-lg font-semibold text-neutral-200 mb-4">Informações</h2>
+                    <div className="space-y-4">
+                        {profile.whatsapp && (
                             <div>
                                 <p className="text-sm text-neutral-400">WhatsApp</p>
                                 <p className="font-medium text-neutral-200">{profile.whatsapp}</p>
                             </div>
+                        )}
+                        <div>
+                            <p className="text-sm text-neutral-400">Código de Identificação</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <code className="bg-blue-500/10 px-3 py-1.5 rounded-lg text-lg font-mono font-bold text-blue-400 border border-blue-500/20 flex-1 text-center tracking-widest">
+                                    {profile.referralCode || '---'}
+                                </code>
+                            </div>
+                            <p className="text-[10px] text-neutral-500 mt-1">
+                                Informe este código ao suporte ou em sorteios.
+                            </p>
                         </div>
                     </div>
-                )}
+                </div>
 
 
             </div>
