@@ -75,9 +75,9 @@ export default function ClientsPage() {
             }
             await loadClients();
             handleCloseForm();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Erro ao salvar cliente:", error);
-            alert("Erro ao salvar cliente.");
+            alert(error.message || "Erro ao salvar cliente.");
         }
     };
 

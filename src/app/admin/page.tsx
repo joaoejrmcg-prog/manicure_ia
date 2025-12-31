@@ -51,7 +51,13 @@ export default function AdminPage() {
 
     const handleMarkReplied = async (id: string) => {
         const replyText = replies[id];
-        await markAsReplied(id, replyText);
+        const result = await markAsReplied(id, replyText);
+
+        if (!result.success) {
+            alert("Erro ao enviar resposta. Verifique se você rodou o script 'support_reply_schema.sql' no Supabase para criar as colunas necessárias.");
+            return;
+        }
+
         setReplies(prev => {
             const next = { ...prev };
             delete next[id];

@@ -10,6 +10,18 @@ export const DataManager = {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
+        // Check for duplicate name (case insensitive)
+        const { data: existing } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('user_id', user.id)
+            .ilike('name', clientData.name)
+            .maybeSingle();
+
+        if (existing) {
+            throw new Error(`Já existe um cliente com o nome "${clientData.name}". Por favor, use um nome diferente (ex: sobrenome).`);
+        }
+
         const { data, error } = await supabase
             .from('clients')
             .insert([{ ...clientData, user_id: user.id }])
@@ -26,6 +38,20 @@ export const DataManager = {
 
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
+
+        if (updates.name) {
+            const { data: existing } = await supabase
+                .from('clients')
+                .select('id')
+                .eq('user_id', user.id)
+                .ilike('name', updates.name)
+                .neq('id', id)
+                .maybeSingle();
+
+            if (existing) {
+                throw new Error(`Já existe um cliente com o nome "${updates.name}". Por favor, use um nome diferente.`);
+            }
+        }
 
         const { data, error } = await supabase
             .from('clients')

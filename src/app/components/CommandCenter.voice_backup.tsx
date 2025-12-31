@@ -134,17 +134,12 @@ export default function CommandCenter() {
     };
 
     const playAudioWithCache = async (text: string, serverAudioData?: string, forcedInputType?: 'text' | 'voice') => {
-        // VOICE DISABLED BY USER REQUEST (See .voice_backup.tsx for original)
-        return;
-
-        /*
         const effectiveInputType = forcedInputType || inputType;
         console.log(`🔊 playAudioWithCache called for: "${text}" | InputType: ${effectiveInputType}`);
         if (effectiveInputType !== 'voice') {
             console.log("🔇 Skipping audio: inputType is not voice");
             return;
         }
-        */
 
         try {
             setIsSpeaking(true);
@@ -156,7 +151,7 @@ export default function CommandCenter() {
 
             if (!audioToPlay) {
                 if (serverAudioData) {
-                    audioToPlay = serverAudioData || null;
+                    audioToPlay = serverAudioData;
                     shouldCache = true;
                 } else {
                     // Try to generate with OpenAI
@@ -174,7 +169,7 @@ export default function CommandCenter() {
                         // Find a good PT-BR voice
                         const voices = window.speechSynthesis.getVoices();
                         const ptVoice = voices.find(v => v.lang.includes('pt-BR') || v.lang.includes('pt'));
-                        if (ptVoice) utterance.voice = ptVoice || null;
+                        if (ptVoice) utterance.voice = ptVoice;
 
                         window.speechSynthesis.speak(utterance);
 
@@ -596,8 +591,7 @@ export default function CommandCenter() {
 
             // Prepare history (last 10 messages)
             const history = messages.slice(-10).map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`);
-            // Force 'text' to prevent server from generating audio (saves cost/time)
-            const response = await processCommand(userInput, history, 'text');
+            const response = await processCommand(userInput, history, currentInputType);
 
             if (response.spokenMessage || response.audio) {
                 await playAudioWithCache(response.spokenMessage || response.message, response.audio, currentInputType);

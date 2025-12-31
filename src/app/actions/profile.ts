@@ -89,7 +89,7 @@ export async function getSubscriptionDetails() {
 
     // Determinar limite de IA
     let aiLimit = 'Ilimitado';
-    if (subscription.plan === 'light') {
+    if (subscription.plan === 'light' || subscription.plan === 'trial') {
         aiLimit = '10 interações/dia';
     }
 

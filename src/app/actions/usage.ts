@@ -90,8 +90,8 @@ export async function checkAndIncrementUsage() {
         return { allowed: false, count: currentCount, message: "Assinatura cancelada." };
     }
 
-    // Plan Limits (Light)
-    if (plan === 'light') {
+    // Plan Limits (Light & Trial)
+    if (plan === 'light' || plan === 'trial') {
         if (currentCount >= 10) return { allowed: false, count: currentCount };
     }
 
