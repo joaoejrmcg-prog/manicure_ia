@@ -3,6 +3,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import { AIResponse, IntentType } from "../types";
+// DataManager removed from server action to avoid Auth errors
 
 // Initialize OpenAI for TTS only
 const openai = new OpenAI({
@@ -12,13 +13,11 @@ const openai = new OpenAI({
 // Helper to get all available Gemini API keys
 const getGeminiApiKeys = () => {
   const keys = [
-    process.env.GOOGLE_GEN_AI_KEY,
-    process.env.GEMINI_API_KEY,
-    process.env.AI_API_KEY_1,
-    process.env.AI_API_KEY_2,
-    process.env.AI_API_KEY_3,
-    process.env.AI_API_KEY_4,
-    process.env.AI_API_KEY_5
+    process.env.GEMINI_SECRET_KEY_1,
+    process.env.GEMINI_SECRET_KEY_2,
+    process.env.GEMINI_SECRET_KEY_3,
+    process.env.GEMINI_SECRET_KEY_4,
+    process.env.GEMINI_SECRET_KEY_5
   ].filter((key): key is string => !!key && key.length > 0);
 
   // Remove duplicates
@@ -62,6 +61,9 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
          "filter": "INCOME" | "EXPENSE" | null 
        }
      - Gatilhos: "O que tem pra hoje?", "Quanto ganhei hoje?", "Quantos clientes atendi?", "Melhor cliente do mês", "Agenda de Janeiro".
+   - CHECK_CLIENT_SCHEDULE: Consultar horário de cliente.
+     - "data": { "clientName": "Nome da Cliente" }
+     - Gatilhos: "Qual o próximo horário da Joana?", "Quando a Maria vem?", "Horário da Ana".
    - UNKNOWN: Não entendeu ou falta dados críticos que impedem até de perguntar.
 
 3. **FORMATO DE RESPOSTA (JSON PURO):**
@@ -245,6 +247,13 @@ export async function processCommand(input: string, history: string[] = [], inpu
         // Don't fail the whole request if audio fails
       }
     }
+  }
+
+  // Handle CHECK_CLIENT_SCHEDULE
+  if (parsedResponse.intent === 'CHECK_CLIENT_SCHEDULE') {
+    // Just pass it through to the client, which has the Auth context to query DataManager
+    parsedResponse.message = "Consultando agenda...";
+    parsedResponse.spokenMessage = ""; // Client will generate audio after query
   }
 
   return {

@@ -1,8 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, DollarSign, Settings, LogOut, X, Calendar, Gift, HelpCircle, LayoutDashboard } from "lucide-react";
+import { Home, Users, DollarSign, Settings, LogOut, X, Calendar, Gift, HelpCircle, LayoutDashboard, Shield } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { cn } from "../lib/utils";
@@ -18,9 +19,26 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
-        router.push("/login");
-        router.refresh();
+        // ClientLayout handles the redirect via onAuthStateChange
     };
+
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [pendingCount, setPendingCount] = useState(0);
+
+    useEffect(() => {
+        const checkAdmin = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.email === 'neomercadoia@gmail.com') {
+                setIsAdmin(true);
+                // Dynamically import to avoid server action issues in client component if not careful, 
+                // but here we can import directly as it's a server action.
+                const { getPendingCount } = await import('../actions/admin');
+                const count = await getPendingCount();
+                setPendingCount(count);
+            }
+        };
+        checkAdmin();
+    }, []);
 
     const menuItems = [
         { icon: Home, label: "Início", href: "/" },
@@ -81,6 +99,35 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         );
                     })}
                 </nav>
+
+                {/* Admin Link */}
+                {isAdmin && (
+                    <div className="px-4 pb-2">
+                        <Link
+                            href="/admin"
+                            onClick={() => onClose?.()}
+                            className={cn(
+                                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                                pathname === "/admin"
+                                    ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                    : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                            )}
+                        >
+                            <div className="relative">
+                                <Shield className="w-5 h-5" />
+                                {pendingCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+                                )}
+                            </div>
+                            <span className="font-medium">Admin</span>
+                            {pendingCount > 0 && (
+                                <span className="ml-auto text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
+                                    {pendingCount}
+                                </span>
+                            )}
+                        </Link>
+                    </div>
+                )}
 
                 {/* Quick Actions */}
                 <div className="px-4 pb-4 space-y-2">

@@ -30,14 +30,15 @@ export default function AjudaPage() {
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        const form = e.currentTarget;
         setSending(true);
 
-        const formData = new FormData(e.currentTarget);
+        const formData = new FormData(form);
         await sendSupportMessage(formData);
 
         setSending(false);
         setSent(true);
-        e.currentTarget.reset();
+        form.reset();
 
         setTimeout(() => setSent(false), 5000);
     };
@@ -87,6 +88,18 @@ export default function AjudaPage() {
                         <Mail className="w-5 h-5" />
                         Fale Conosco
                     </h2>
+
+                    <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                        <p className="text-sm text-neutral-300 mb-2">
+                            Entre em contato diretamente pelo email:
+                        </p>
+                        <p className="text-blue-400 font-medium select-all">
+                            neomercadoia@gmail.com
+                        </p>
+                        <p className="text-xs text-neutral-500 mt-2">
+                            Ao enviar o formulário abaixo, responderemos neste mesmo email.
+                        </p>
+                    </div>
 
                     {sent ? (
                         <div className="bg-green-500/10 text-green-400 p-4 rounded-xl text-center animate-in fade-in border border-green-500/20">

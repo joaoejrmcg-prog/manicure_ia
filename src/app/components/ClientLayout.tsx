@@ -21,11 +21,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         const checkAuth = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
-
                 if (session) {
                     setIsAuthenticated(true);
-                } else if (!isPublicPage) {
-                    router.push('/login');
+                } else {
+                    setIsAuthenticated(false);
                 }
             } catch (error) {
                 console.error("Auth check failed", error);
@@ -37,17 +36,26 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         checkAuth();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_OUT' || (!session && !isPublicPage)) {
+            if (event === 'SIGNED_OUT' || !session) {
                 setIsAuthenticated(false);
-                router.push('/login');
+                router.push('/login'); // Centralized redirect
+                router.refresh();
             } else if (session) {
                 setIsAuthenticated(true);
             }
         });
 
         return () => subscription.unsubscribe();
-        return () => subscription.unsubscribe();
-    }, [pathname, isPublicPage, router]);
+    }, [router]);
+
+    // Protect private routes
+    useEffect(() => {
+        const isAuthCallback = window.location.search.includes('code=');
+        if (!isLoading && !isAuthenticated && !isPublicPage && !isAuthCallback) {
+            router.push('/login');
+            router.refresh();
+        }
+    }, [isLoading, isAuthenticated, isPublicPage, router]);
 
     // Close sidebar on route change
     useEffect(() => {
@@ -66,8 +74,19 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         return <>{children}</>;
     }
 
-    if (!isAuthenticated) {
-        return null;
+    // Check for auth code (e.g. email confirmation or OAuth)
+    const isAuthCallback = pathname === '/' && typeof window !== 'undefined' && window.location.search.includes('code=');
+
+    if (!isAuthenticated && !isAuthCallback) {
+        // Show loading state instead of null (black screen) while redirecting
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                    <p className="text-neutral-400 text-sm">Redirecionando...</p>
+                </div>
+            </div>
+        );
     }
 
     return (

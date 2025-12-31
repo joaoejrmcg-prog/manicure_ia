@@ -30,7 +30,7 @@ export default function SubscriptionBadge({ plan, status }: SubscriptionBadgePro
 
     const statusNames = {
         'active': 'Ativo',
-        'trial': 'Período Trial',
+        'trial': 'Período de Testes',
         'overdue': 'Vencido',
         'canceled': 'Cancelado',
     };

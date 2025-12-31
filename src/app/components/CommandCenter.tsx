@@ -35,6 +35,7 @@ export default function CommandCenter() {
     const [usageCount, setUsageCount] = useState(0);
     const [inputType, setInputType] = useState<'text' | 'voice'>('text');
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const [userPlan, setUserPlan] = useState<string>('trial'); // Default to trial
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -90,14 +91,23 @@ export default function CommandCenter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
                 router.push("/login");
+                return;
             }
+
+            // Fetch subscription
+            const { data: sub } = await supabase
+                .from('subscriptions')
+                .select('plan')
+                .eq('user_id', session.user.id)
+                .single();
+
+            if (sub?.plan) setUserPlan(sub.plan);
         };
         checkUser();
     }, [router]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
-        router.push("/login");
     };
 
     const addMessage = (role: 'user' | 'assistant', content: string, type: 'text' | 'error' | 'success' = 'text') => {
@@ -143,11 +153,32 @@ export default function CommandCenter() {
                     audioToPlay = serverAudioData;
                     shouldCache = true;
                 } else {
-                    // Generate on demand if not provided
+                    // Try to generate with OpenAI
                     const generated = await generateAudio(text);
                     if (generated) {
                         audioToPlay = generated;
                         shouldCache = true;
+                    } else {
+                        // Fallback to Browser TTS (Native PT-BR)
+                        console.log("🌐 Using Browser TTS fallback");
+                        const utterance = new SpeechSynthesisUtterance(text);
+                        utterance.lang = 'pt-BR';
+                        utterance.rate = 1.1; // Slightly faster
+
+                        // Find a good PT-BR voice
+                        const voices = window.speechSynthesis.getVoices();
+                        const ptVoice = voices.find(v => v.lang.includes('pt-BR') || v.lang.includes('pt'));
+                        if (ptVoice) utterance.voice = ptVoice;
+
+                        window.speechSynthesis.speak(utterance);
+
+                        // Wait for end (approximate since onend is tricky with React updates)
+                        await new Promise<void>(resolve => {
+                            utterance.onend = () => resolve();
+                            // Timeout fallback
+                            setTimeout(resolve, (text.length * 100) + 1000);
+                        });
+                        return; // Exit since we played via browser
                     }
                 }
             }
@@ -473,8 +504,8 @@ export default function CommandCenter() {
                 if (client) {
                     await DataManager.addTransaction({
                         type: 'income',
-                        amount: updatedTransactionData.amount,
-                        description: updatedTransactionData.service,
+                        amount: Number(String(updatedTransactionData.amount).replace(',', '.')),
+                        description: updatedTransactionData.service || 'Venda',
                         payment_method: updatedTransactionData.paymentMethod,
                         client_id: client.id
                     });
@@ -599,6 +630,43 @@ export default function CommandCenter() {
                         type: 'CONFIRM_ACTION',
                         data: { originalIntent: response }
                     });
+                    return;
+
+                case 'CHECK_CLIENT_SCHEDULE':
+                    const clientName = response.data?.clientName;
+                    if (clientName) {
+                        try {
+                            const clients = await DataManager.getClients();
+                            const client = clients.find(c => c.name.toLowerCase().includes(clientName.toLowerCase()));
+
+                            if (client) {
+                                const nextApp = await DataManager.findNextAppointment(client.id);
+                                if (nextApp) {
+                                    const date = new Date(nextApp.date_time);
+                                    const dateStr = date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+                                    const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                                    const msg = `A ${client.name} tem horário agendado para ${dateStr} às ${timeStr}. Serviço: ${nextApp.description}.`;
+                                    const spoken = `A ${client.name} vem ${dateStr} às ${timeStr}.`;
+
+                                    addMessage('assistant', msg);
+                                    await playAudioWithCache(spoken, undefined, inputType);
+                                } else {
+                                    const msg = `A cliente ${client.name} não tem agendamentos futuros.`;
+                                    addMessage('assistant', msg);
+                                    await playAudioWithCache(msg, undefined, inputType);
+                                }
+                            } else {
+                                const msg = `Não encontrei nenhuma cliente chamada "${clientName}".`;
+                                addMessage('assistant', msg);
+                                await playAudioWithCache(msg, undefined, inputType);
+                            }
+                        } catch (e) {
+                            console.error("Erro ao consultar horário:", e);
+                            addMessage('assistant', "Houve um erro ao consultar a agenda.", 'error');
+                        }
+                    }
+                    return;
                     break;
 
                 case 'REGISTER_SALE':
@@ -866,16 +934,26 @@ export default function CommandCenter() {
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                             Online
                             <span className="mx-1 text-neutral-700">•</span>
-                            <span className={usageCount >= 10 ? "text-red-400" : "text-neutral-400"}>
-                                {Math.max(0, 10 - usageCount)} restantes
-                            </span>
+                            {['vip', 'pro'].includes(userPlan) ? (
+                                <span className="text-blue-400 flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3" />
+                                    Ilimitado
+                                </span>
+                            ) : (
+                                <span className={usageCount >= 10 ? "text-red-400" : "text-neutral-400"}>
+                                    {Math.max(0, 10 - usageCount)} restantes
+                                </span>
+                            )}
                         </p>
                     </div>
                 </div>
             </div>
 
             {/* Chat Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-neutral-800">
+            <div className={cn(
+                "flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-neutral-800 transition-all duration-300",
+                (isListening || (isProcessing && inputType === 'voice') || isSpeaking) && "pb-[350px]"
+            )}>
                 {messages.length === 0 && (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-50">
                         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center mb-4">
