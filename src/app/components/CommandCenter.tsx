@@ -122,15 +122,37 @@ export default function CommandCenter() {
         return true;
     };
 
-    const speak = async (text: string) => {
+    const playAudioWithCache = async (text: string, serverAudioData?: string) => {
         if (inputType !== 'voice') return;
 
         try {
             setIsSpeaking(true);
-            const audioData = await generateAudio(text);
+            const cacheKey = `audio_cache_${text.trim().toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+            const cachedAudio = localStorage.getItem(cacheKey);
 
-            if (audioData) {
-                const audio = new Audio(`data:audio/mp3;base64,${audioData}`);
+            let audioToPlay = cachedAudio;
+
+            if (!audioToPlay) {
+                if (serverAudioData) {
+                    audioToPlay = serverAudioData;
+                } else {
+                    // Generate on demand if not provided
+                    const generated = await generateAudio(text);
+                    if (generated) audioToPlay = generated;
+                }
+
+                // Cache it if we found/generated it
+                if (audioToPlay) {
+                    try {
+                        localStorage.setItem(cacheKey, audioToPlay);
+                    } catch (e) {
+                        console.warn("Storage full, skipping cache");
+                    }
+                }
+            }
+
+            if (audioToPlay) {
+                const audio = new Audio(`data:audio/mp3;base64,${audioToPlay}`);
                 await new Promise<void>((resolve) => {
                     audio.onended = () => resolve();
                     audio.play().catch(e => {
@@ -375,7 +397,10 @@ export default function CommandCenter() {
                             const dateStr = date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
                             const msg = `Agendado: ${originalData.service} para ${newClient.name} em ${dateStr}.`;
                             addMessage('assistant', msg, 'success');
-                            await speak(msg);
+                            const msg = `Agendado: ${originalData.service} para ${newClient.name} em ${dateStr}.`;
+                            addMessage('assistant', msg, 'success');
+                            // Use a short confirmation for audio, but cache it
+                            await playAudioWithCache("Pronto, agendado.");
                         }
                     } catch (resumptionError) {
                         console.error("Erro na retomada:", resumptionError);
@@ -513,23 +538,8 @@ export default function CommandCenter() {
             const history = messages.slice(-10).map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`);
             const response = await processCommand(userInput, history, inputType);
 
-            if (response.audio) {
-                try {
-                    setIsSpeaking(true);
-                    const audio = new Audio(`data:audio/mp3;base64,${response.audio}`);
-
-                    await new Promise<void>((resolve) => {
-                        audio.onended = () => resolve();
-                        audio.play().catch(e => {
-                            console.error("Audio play error:", e);
-                            resolve(); // Resolve anyway to show text
-                        });
-                    });
-                } catch (e) {
-                    console.error("Error playing audio:", e);
-                } finally {
-                    setIsSpeaking(false);
-                }
+            if (response.spokenMessage || response.audio) {
+                await playAudioWithCache(response.spokenMessage || response.message, response.audio);
             }
 
             // Handle specific intents that require client-side logic

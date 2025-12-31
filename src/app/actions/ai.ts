@@ -68,7 +68,8 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
    {
      "intent": "TIPO_DA_INTENCAO",
      "data": { ...dados extraídos... },
-     "message": "Texto que será falado/exibido para o usuário (Afirmativo: 'Agendei...', 'Registrei...')"
+     "message": "Texto DETALHADO para exibir na tela (ex: 'Agendado: Unha para Maria...')",
+     "spokenMessage": "Texto CURTO para falar (ex: 'OK', 'Feito', 'Combinado'). Se for uma pergunta, repita a pergunta completa."
    }
 
 ### EXEMPLOS DE FLUXO:
@@ -78,7 +79,8 @@ User: "Marca a Maria amanhã as 10 pra fazer unha"
 AI: {
   "intent": "SCHEDULE_SERVICE",
   "data": { "service": "unha", "clientName": "Maria", "isoDate": "2023-10-28T10:00:00" },
-  "message": "Combinado. Agendei unha para Maria amanhã às 10h."
+  "message": "Combinado. Agendei unha para Maria amanhã às 10h.",
+  "spokenMessage": "OK"
 }
 
 **Cenário 2: Correção Imediata (Desfazer)**
@@ -86,7 +88,8 @@ User: "Me enganei, cancela"
 AI: {
   "intent": "DELETE_LAST_ACTION",
   "data": {},
-  "message": "Tudo bem, desfiz a última ação."
+  "message": "Tudo bem, desfiz a última ação.",
+  "spokenMessage": "Pronto, desfiz."
 }
 
 **Cenário 3: Venda sem forma de pagamento (Dado Faltante)**
@@ -94,12 +97,17 @@ User: "A Maria pagou 50 reais na unha"
 AI: {
   "intent": "CONFIRMATION_REQUIRED",
   "data": { "originalIntent": "REGISTER_SALE", "service": "unha", "clientName": "Maria", "amount": 50 },
-  "message": "Certo, R$ 50,00 da Maria. Qual foi a forma de pagamento?"
+  "message": "Certo, R$ 50,00 da Maria. Qual foi a forma de pagamento?",
+  "spokenMessage": "Qual foi a forma de pagamento?"
 }
 
 **Cenário 4: Agendamento em etapas**
 User: "Agenda o Valdir pra semana que vem"
-AI: { "intent": "CONFIRMATION_REQUIRED", "message": "Qual dia, horário e serviço?" }
+AI: { 
+  "intent": "CONFIRMATION_REQUIRED", 
+  "message": "Qual dia, horário e serviço?",
+  "spokenMessage": "Qual dia, horário e serviço?"
+}
 User: "terça as 10. Ele quer uma vistoria"
 AI: {
   "intent": "SCHEDULE_SERVICE",
@@ -108,7 +116,8 @@ AI: {
     "service": "vistoria",
     "isoDate": "2023-11-07T10:00:00"
   },
-  "message": "Pronto. Agendei vistoria para Valdir na terça (07/11) às 10h."
+  "message": "Pronto. Agendei vistoria para Valdir na terça (07/11) às 10h.",
+  "spokenMessage": "Feito"
 }
 `;
 
@@ -181,18 +190,20 @@ export async function processCommand(input: string, history: string[] = [], inpu
   let audioData: string | undefined = undefined;
 
   // 2. Generate Audio with OpenAI (if voice input)
+  // 2. Generate Audio with OpenAI (if voice input)
   const finalMessage = parsedResponse.message || "Comando processado.";
+  const spokenMessage = parsedResponse.spokenMessage || finalMessage; // Use spokenMessage if available, else fallback to full message
 
-  if (inputType === 'voice' && finalMessage) {
+  if (inputType === 'voice' && spokenMessage) {
     if (!process.env.OPENAI_API_KEY) {
       console.warn("⚠️ OPENAI_API_KEY missing, skipping TTS generation.");
     } else {
       try {
-        console.log("🎙️ Gerando áudio OpenAI para:", finalMessage.substring(0, 50) + "...");
+        console.log("🎙️ Gerando áudio OpenAI para:", spokenMessage.substring(0, 50) + "...");
         const mp3 = await openai.audio.speech.create({
           model: "tts-1",
           voice: "nova",
-          input: finalMessage,
+          input: spokenMessage,
         });
 
         const buffer = Buffer.from(await mp3.arrayBuffer());
@@ -209,6 +220,7 @@ export async function processCommand(input: string, history: string[] = [], inpu
     intent: parsedResponse.intent as IntentType,
     data: parsedResponse.data,
     message: parsedResponse.message || "Comando processado.",
+    spokenMessage: spokenMessage, // Return spokenMessage for client caching
     confidence: 0.9,
     audio: audioData
   };

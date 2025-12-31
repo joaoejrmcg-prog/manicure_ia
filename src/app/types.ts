@@ -35,6 +35,7 @@ export interface AIResponse {
     intent: IntentType;
     data?: any;
     message: string; // Human readable explanation of what was understood
+    spokenMessage?: string; // New field for short audio text
     confidence: number;
     audio?: string; // Base64 audio data
 }
