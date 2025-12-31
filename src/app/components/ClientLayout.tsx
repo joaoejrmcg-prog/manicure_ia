@@ -73,8 +73,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         return <>{children}</>;
     }
 
-    // Check for auth code (e.g. email confirmation or OAuth)
-    const isAuthCallback = pathname === '/' && typeof window !== 'undefined' && window.location.search.includes('code=');
+    const [isAuthCallback, setIsAuthCallback] = useState(false);
+
+    useEffect(() => {
+        // Check for auth code on mount to avoid hydration mismatch
+        if (typeof window !== 'undefined' && window.location.search.includes('code=')) {
+            setIsAuthCallback(true);
+        }
+    }, []);
 
     // Safety net: If stuck in redirect state for too long, force hard navigation
     useEffect(() => {
