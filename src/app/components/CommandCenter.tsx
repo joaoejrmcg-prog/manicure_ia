@@ -397,8 +397,7 @@ export default function CommandCenter() {
                             const dateStr = date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
                             const msg = `Agendado: ${originalData.service} para ${newClient.name} em ${dateStr}.`;
                             addMessage('assistant', msg, 'success');
-                            const msg = `Agendado: ${originalData.service} para ${newClient.name} em ${dateStr}.`;
-                            addMessage('assistant', msg, 'success');
+
                             // Use a short confirmation for audio, but cache it
                             await playAudioWithCache("Pronto, agendado.");
                         }
