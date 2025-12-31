@@ -45,27 +45,27 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4">
+        <div className="min-h-screen bg-neutral-950 p-4">
             <div className="max-w-5xl mx-auto">
                 {/* Header */}
                 <div className="flex items-center gap-4 mb-6">
-                    <Link href="/perfil" className="text-gray-600 hover:text-gray-900">
+                    <Link href="/perfil" className="text-neutral-400 hover:text-white">
                         <ArrowLeft size={24} />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Escolha seu Plano</h1>
-                        <p className="text-sm text-gray-500 mt-1">Selecione o plano ideal para o seu negócio</p>
+                        <h1 className="text-2xl font-bold text-neutral-100">Escolha seu Plano</h1>
+                        <p className="text-sm text-neutral-400 mt-1">Selecione o plano ideal para o seu negócio</p>
                     </div>
                 </div>
 
                 {/* Mensagem de aviso */}
                 {showMessage && (
-                    <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-lg animate-in fade-in slide-in-from-top-4">
+                    <div className="mb-6 p-4 bg-blue-500/10 border-l-4 border-blue-500 rounded-lg animate-in fade-in slide-in-from-top-4">
                         <div className="flex items-center gap-3">
-                            <Sparkles className="text-blue-500" size={20} />
+                            <Sparkles className="text-blue-400" size={20} />
                             <div>
-                                <p className="font-semibold text-blue-800">Em breve - Pagamento via boleto</p>
-                                <p className="text-sm text-blue-600">Estamos finalizando a integração de pagamentos. Aguarde!</p>
+                                <p className="font-semibold text-blue-300">Em breve - Pagamento via boleto</p>
+                                <p className="text-sm text-blue-400/80">Estamos finalizando a integração de pagamentos. Aguarde!</p>
                             </div>
                         </div>
                     </div>
@@ -84,28 +84,6 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                             onSelect={() => handleSelectPlan(plan.name)}
                         />
                     ))}
-                </div>
-
-                {/* Código de Indicação */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl shadow-sm p-6 text-white text-center">
-                    <h3 className="text-xl font-bold mb-2">🎁 Tem um código de indicação?</h3>
-                    <p className="text-blue-100 mb-4">
-                        Ganhe 30 dias grátis ao se cadastrar com o código de um amigo!
-                    </p>
-                    <Link
-                        href="/indique"
-                        className="inline-block bg-white text-blue-600 px-6 py-3 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200"
-                    >
-                        Indicar e Ganhar Benefícios
-                    </Link>
-                </div>
-
-                {/* Info VIP */}
-                <div className="mt-6 p-6 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-2xl shadow-sm text-center">
-                    <h3 className="text-xl font-bold text-white mb-2">⭐ Plano VIP</h3>
-                    <p className="text-yellow-50 text-sm">
-                        Parceiros e amigos especiais têm acesso vitalício! Entre em contato para mais informações.
-                    </p>
                 </div>
             </div>
         </div>

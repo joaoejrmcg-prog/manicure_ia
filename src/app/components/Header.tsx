@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { User } from "@supabase/supabase-js";
 import { Bell, Menu } from "lucide-react";
+import TipOfTheDay from "./TipOfTheDay";
 
 interface HeaderProps {
     onMenuClick?: () => void;
@@ -35,10 +36,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </div>
 
             <div className="flex items-center gap-4">
-                <button className="p-2 text-neutral-400 hover:text-neutral-200 transition-colors relative">
-                    <Bell className="w-5 h-5" />
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full"></span>
-                </button>
+                <TipOfTheDay />
                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white">
                     {user?.email?.[0].toUpperCase()}
                 </div>

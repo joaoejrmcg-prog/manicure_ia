@@ -44,35 +44,35 @@ export default function AjudaPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-8">
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <HelpCircle className="text-blue-600" />
+            <h1 className="text-2xl font-bold text-neutral-100 flex items-center gap-2">
+                <HelpCircle className="text-blue-500" />
                 Central de Ajuda
             </h1>
 
             <div className="grid md:grid-cols-2 gap-8">
                 {/* FAQ Section */}
                 <div className="space-y-6">
-                    <h2 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-neutral-300 flex items-center gap-2">
                         <MessageSquare className="w-5 h-5" />
                         Perguntas Frequentes
                     </h2>
 
                     <div className="space-y-3">
                         {faqs.map((faq, index) => (
-                            <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div key={index} className="bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden">
                                 <button
                                     onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                                    className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                                    className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-neutral-800 transition-colors"
                                 >
-                                    <span className="font-medium text-gray-700">{faq.question}</span>
+                                    <span className="font-medium text-neutral-200">{faq.question}</span>
                                     {openFaq === index ? (
-                                        <ChevronUp className="w-4 h-4 text-gray-400" />
+                                        <ChevronUp className="w-4 h-4 text-neutral-500" />
                                     ) : (
-                                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                                        <ChevronDown className="w-4 h-4 text-neutral-500" />
                                     )}
                                 </button>
                                 {openFaq === index && (
-                                    <div className="px-4 pb-4 text-sm text-gray-600 animate-in slide-in-from-top-2 duration-200">
+                                    <div className="px-4 pb-4 text-sm text-neutral-400 animate-in slide-in-from-top-2 duration-200">
                                         {faq.answer}
                                     </div>
                                 )}
@@ -82,25 +82,25 @@ export default function AjudaPage() {
                 </div>
 
                 {/* Contact Form */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
-                    <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 h-fit">
+                    <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
                         <Mail className="w-5 h-5" />
                         Fale Conosco
                     </h2>
 
                     {sent ? (
-                        <div className="bg-green-50 text-green-700 p-4 rounded-xl text-center animate-in fade-in">
+                        <div className="bg-green-500/10 text-green-400 p-4 rounded-xl text-center animate-in fade-in border border-green-500/20">
                             <p className="font-bold">Mensagem enviada!</p>
                             <p className="text-sm">Responderemos em breve no seu email.</p>
                         </div>
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Assunto</label>
+                                <label className="block text-sm font-medium text-neutral-400 mb-1">Assunto</label>
                                 <select
                                     name="subject"
                                     required
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-200 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
                                 >
                                     <option value="">Selecione um assunto</option>
                                     <option value="duvida">Dúvida sobre o sistema</option>
@@ -112,13 +112,13 @@ export default function AjudaPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
+                                <label className="block text-sm font-medium text-neutral-400 mb-1">Mensagem</label>
                                 <textarea
                                     name="message"
                                     required
                                     rows={4}
                                     placeholder="Descreva como podemos ajudar..."
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-200 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none"
                                 ></textarea>
                             </div>
 

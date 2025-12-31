@@ -232,10 +232,10 @@ _Gerado por Meu Negócio IA_`;
             ) : (
                 <div className="space-y-3">
                     {filteredRecords.map(record => (
-                        <div key={record.id} className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 hover:border-neutral-700 transition-colors group flex items-center justify-between">
+                        <div key={record.id} className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 hover:border-neutral-700 transition-colors group flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
                                 <div className={cn(
-                                    "w-10 h-10 rounded-full flex items-center justify-center",
+                                    "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
                                     record.type === 'income' ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
                                 )}>
                                     {record.type === 'income' ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
@@ -263,9 +263,9 @@ _Gerado por Meu Negócio IA_`;
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0 border-t sm:border-t-0 border-neutral-800 pt-3 sm:pt-0">
                                 <span className={cn(
-                                    "font-bold",
+                                    "font-bold text-lg sm:text-base",
                                     record.type === 'income' ? "text-green-400" : "text-red-400"
                                 )}>
                                     {record.type === 'income' ? '+' : '-'} R$ {record.amount.toFixed(2)}

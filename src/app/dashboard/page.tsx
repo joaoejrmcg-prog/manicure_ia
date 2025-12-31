@@ -55,20 +55,12 @@ function DashboardContent() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-16rem)]">
+            <div className="grid grid-cols-1 gap-6 h-[calc(100vh-16rem)]">
                 {/* Feed de Ações */}
-                <div className="lg:col-span-2 flex flex-col h-full">
+                <div className="flex flex-col h-full">
                     <h2 className="text-lg font-semibold text-neutral-300 mb-4">Atividades Recentes</h2>
                     <div className="flex-1 bg-neutral-900 border border-neutral-800 rounded-2xl p-1 overflow-hidden">
                         <ActionFeed />
-                    </div>
-                </div>
-
-                {/* Lista de Clientes */}
-                <div className="lg:col-span-1 h-full flex flex-col">
-                    <h2 className="text-lg font-semibold text-neutral-300 mb-4">Seus Clientes</h2>
-                    <div className="flex-1 overflow-hidden">
-                        <ClientList />
                     </div>
                 </div>
             </div>

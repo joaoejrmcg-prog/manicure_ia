@@ -46,7 +46,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         });
 
         return () => subscription.unsubscribe();
+        return () => subscription.unsubscribe();
     }, [pathname, isPublicPage, router]);
+
+    // Close sidebar on route change
+    useEffect(() => {
+        setIsSidebarOpen(false);
+    }, [pathname]);
 
     if (isLoading) {
         return (

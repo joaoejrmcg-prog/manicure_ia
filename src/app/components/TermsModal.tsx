@@ -11,6 +11,7 @@ export default function TermsModal() {
     const [loading, setLoading] = useState(true);
     const [accepting, setAccepting] = useState(false);
     const [canAccept, setCanAccept] = useState(false);
+    const [hasAccepted, setHasAccepted] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
@@ -35,7 +36,10 @@ export default function TermsModal() {
     const checkStatus = async () => {
         try {
             const accepted = await checkTermsAccepted();
-            setIsOpen(!accepted);
+            setHasAccepted(accepted);
+            if (!accepted) {
+                setIsOpen(true);
+            }
         } catch (error) {
             console.error('Error checking terms:', error);
         } finally {
@@ -56,6 +60,7 @@ export default function TermsModal() {
         setAccepting(true);
         try {
             await acceptTerms();
+            setHasAccepted(true);
             setIsOpen(false);
         } catch (error) {
             console.error('Error accepting terms:', error);
@@ -72,6 +77,10 @@ export default function TermsModal() {
         }
     };
 
+    const handleClose = () => {
+        setIsOpen(false);
+    };
+
     if (loading || !isOpen) return null;
 
     return (
@@ -84,7 +93,9 @@ export default function TermsModal() {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-gray-800">Termos de Uso</h2>
-                        <p className="text-sm text-gray-500">Leia até o final para aceitar</p>
+                        <p className="text-sm text-gray-500">
+                            {hasAccepted ? "Visualização dos termos" : "Leia até o final para aceitar"}
+                        </p>
                     </div>
                 </div>
 
@@ -94,6 +105,7 @@ export default function TermsModal() {
                     onScroll={handleScroll}
                     className="p-6 overflow-y-auto text-gray-600 text-sm leading-relaxed space-y-6 flex-1 scroll-smooth"
                 >
+                    {/* ... content remains same ... */}
                     <h3 className="text-lg font-bold text-gray-900 text-center mb-4">📄 TERMOS DE USO</h3>
 
                     <section>
@@ -219,41 +231,54 @@ export default function TermsModal() {
 
                 {/* Footer */}
                 <div className="p-6 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4 flex-shrink-0">
-                    <button
-                        onClick={handleDecline}
-                        className="text-gray-500 hover:text-red-500 text-sm font-medium flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors"
-                    >
-                        <LogOut className="w-4 h-4" />
-                        Sair / Recusar
-                    </button>
+                    {hasAccepted ? (
+                        <div className="w-full flex justify-end">
+                            <button
+                                onClick={handleClose}
+                                className="w-full sm:w-auto px-8 py-3 rounded-xl font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <button
+                                onClick={handleDecline}
+                                className="text-gray-500 hover:text-red-500 text-sm font-medium flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                                <LogOut className="w-4 h-4" />
+                                Sair / Recusar
+                            </button>
 
-                    <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
-                        {!canAccept && (
-                            <p className="text-xs text-orange-500 animate-pulse text-center sm:text-right w-full">
-                                Role até o fim para aceitar
-                            </p>
-                        )}
-                        <button
-                            onClick={handleAccept}
-                            disabled={!canAccept || accepting}
-                            className={`w-full sm:w-auto px-8 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${canAccept
-                                ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-500/20'
-                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                }`}
-                        >
-                            {accepting ? (
-                                <>
-                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                                    Processando...
-                                </>
-                            ) : (
-                                <>
-                                    <ScrollText className="w-4 h-4" />
-                                    Li e Aceito os Termos
-                                </>
-                            )}
-                        </button>
-                    </div>
+                            <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+                                {!canAccept && (
+                                    <p className="text-xs text-orange-500 animate-pulse text-center sm:text-right w-full">
+                                        Role até o fim para aceitar
+                                    </p>
+                                )}
+                                <button
+                                    onClick={handleAccept}
+                                    disabled={!canAccept || accepting}
+                                    className={`w-full sm:w-auto px-8 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${canAccept
+                                        ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-500/20'
+                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                        }`}
+                                >
+                                    {accepting ? (
+                                        <>
+                                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                            Processando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ScrollText className="w-4 h-4" />
+                                            Li e Aceito os Termos
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

@@ -137,7 +137,9 @@ export async function processCommand(input: string, history: string[] = [], inpu
     };
   }
 
-  const targetModel = "gemini-2.0-flash-exp"; // Or gemini-1.5-flash if preferred
+  // CRITICAL: User explicitly requested "gemini-2.5-flash".
+  // DO NOT CHANGE THIS MODEL VERSION.
+  const targetModel = "gemini-2.5-flash";
   let lastError: any = null;
   let parsedResponse: any = null;
 

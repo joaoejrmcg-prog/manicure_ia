@@ -52,7 +52,7 @@ export default function CommandCenter() {
     }, [input]);
     const router = useRouter();
 
-    const { isListening, transcript, startListening, stopListening, isSupported } = useSpeechRecognition();
+    const { isListening, transcript, startListening, stopListening, isSupported, resetTranscript } = useSpeechRecognition();
 
     useEffect(() => {
         if (transcript) {
@@ -60,6 +60,24 @@ export default function CommandCenter() {
             setInputType('voice');
         }
     }, [transcript]);
+
+    // Auto-send when listening stops
+    useEffect(() => {
+        if (!isListening && transcript && !isProcessing) {
+            const userInput = transcript;
+
+            const autoSend = async () => {
+                setInput("");
+                resetTranscript(); // Clear transcript to prevent double-send
+                addMessage('user', userInput);
+                setIsProcessing(true);
+                await processAIResponse(userInput);
+                setIsProcessing(false);
+            };
+
+            autoSend();
+        }
+    }, [isListening]); // Only trigger when isListening changes
 
     // Scroll to bottom on new message
     useEffect(() => {
@@ -75,7 +93,6 @@ export default function CommandCenter() {
             }
         };
         checkUser();
-        textareaRef.current?.focus();
     }, [router]);
 
     const handleLogout = async () => {
