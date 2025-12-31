@@ -41,7 +41,7 @@ export default async function IndiquePage() {
     const paidReferrals = stats?.paidReferred || 0;
     const earnedDays = stats?.earnedDays || 0;
 
-    const referralLink = `${process.env.NEXT_PUBLIC_APP_URL || 'https://manicure-ia.vercel.app'}/login?ref=${referralCode}`;
+    const referralLink = `${process.env.NEXT_PUBLIC_APP_URL || 'https://meu-nogocio-ia.vercel.app'}/login?ref=${referralCode}`;
 
 
     return (
