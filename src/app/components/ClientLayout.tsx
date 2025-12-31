@@ -39,7 +39,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             if (event === 'SIGNED_OUT' || !session) {
                 setIsAuthenticated(false);
                 router.push('/login'); // Centralized redirect
-                router.refresh();
             } else if (session) {
                 setIsAuthenticated(true);
             }
@@ -76,6 +75,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
     // Check for auth code (e.g. email confirmation or OAuth)
     const isAuthCallback = pathname === '/' && typeof window !== 'undefined' && window.location.search.includes('code=');
+
+    // Safety net: If stuck in redirect state for too long, force hard navigation
+    useEffect(() => {
+        if (!isAuthenticated && !isAuthCallback && !isPublicPage && !isLoading) {
+            const timer = setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [isAuthenticated, isAuthCallback, isPublicPage, isLoading]);
 
     if (!isAuthenticated && !isAuthCallback) {
         // Show loading state instead of null (black screen) while redirecting
