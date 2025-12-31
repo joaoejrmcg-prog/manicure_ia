@@ -123,7 +123,11 @@ export default function CommandCenter() {
     };
 
     const playAudioWithCache = async (text: string, serverAudioData?: string) => {
-        if (inputType !== 'voice') return;
+        console.log(`🔊 playAudioWithCache called for: "${text}" | InputType: ${inputType}`);
+        if (inputType !== 'voice') {
+            console.log("🔇 Skipping audio: inputType is not voice");
+            return;
+        }
 
         try {
             setIsSpeaking(true);
@@ -372,12 +376,13 @@ export default function CommandCenter() {
                             } else {
                                 await DataManager.addTransaction({
                                     type: 'income',
-                                    amount: originalData.amount,
-                                    description: originalData.service,
+                                    amount: Number(originalData.amount),
+                                    description: originalData.service || 'Venda',
                                     payment_method: originalData.paymentMethod,
                                     client_id: newClient.id
                                 });
-                                addMessage('assistant', `Venda registrada: R$${originalData.amount} (${originalData.service})`, 'success');
+                                addMessage('assistant', `Venda registrada: R$${originalData.amount} (${originalData.service || 'Venda'})`, 'success');
+                                await playAudioWithCache("Pronto, registrado.");
                             }
                         } else if (conversationState.data.originalIntent.intent === 'SCHEDULE_SERVICE') {
                             // Date parsing logic
@@ -463,7 +468,10 @@ export default function CommandCenter() {
                     addMessage('assistant', `Venda registrada: R$${updatedTransactionData.amount} no ${updatedTransactionData.paymentMethod}.`, 'success');
                 } else {
                     // Client not found -> Trigger Add Client Flow
-                    addMessage('assistant', `Não encontrei o cliente "${clientName}". Deseja cadastrá-lo agora?`);
+                    const msg = `Não encontrei o cliente "${clientName}". Deseja cadastrá-lo agora?`;
+                    addMessage('assistant', msg);
+                    await playAudioWithCache(msg);
+
                     setConversationState({
                         type: 'CONFIRM_ADD_CLIENT',
                         data: {

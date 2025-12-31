@@ -68,8 +68,14 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
    {
      "intent": "TIPO_DA_INTENCAO",
      "data": { ...dados extraídos... },
-     "message": "Texto DETALHADO para exibir na tela (ex: 'Agendado: Unha para Maria...')",
-     "spokenMessage": "Texto CURTO para falar (ex: 'OK', 'Feito', 'Combinado'). Se for uma pergunta, repita a pergunta completa."
+   {
+     "intent": "TIPO_DA_INTENCAO",
+     "data": { ...dados extraídos... },
+   {
+     "intent": "TIPO_DA_INTENCAO",
+     "data": { ...dados extraídos... },
+     "message": "Texto DETALHADO para exibir na tela.",
+     "spokenMessage": "Texto para FALAR. REGRAS: 1. Ações de Sucesso (Agendar, Cadastrar, Vender) -> USE 'OK', 'Feito' ou 'Pronto'. 2. Perguntas ou Relatórios (O que tem hoje?, Listar clientes) -> USE O TEXTO COMPLETO/RESUMIDO DA RESPOSTA."
    }
 
 ### EXEMPLOS DE FLUXO:
@@ -83,13 +89,22 @@ AI: {
   "spokenMessage": "OK"
 }
 
+**Cenário 1.1: Cadastro Simples**
+User: "Cadastra a Bia"
+AI: {
+  "intent": "ADD_CLIENT",
+  "data": { "name": "Bia" },
+  "message": "Cliente Bia cadastrada com sucesso.",
+  "spokenMessage": "OK"
+}
+
 **Cenário 2: Correção Imediata (Desfazer)**
 User: "Me enganei, cancela"
 AI: {
   "intent": "DELETE_LAST_ACTION",
   "data": {},
   "message": "Tudo bem, desfiz a última ação.",
-  "spokenMessage": "Pronto, desfiz."
+  "spokenMessage": "Pronto"
 }
 
 **Cenário 3: Venda sem forma de pagamento (Dado Faltante)**
@@ -116,8 +131,16 @@ AI: {
     "service": "vistoria",
     "isoDate": "2023-11-07T10:00:00"
   },
-  "message": "Pronto. Agendei vistoria para Valdir na terça (07/11) às 10h.",
   "spokenMessage": "Feito"
+}
+
+**Cenário 6: Relatórios (Informação)**
+User: "O que tem pra hoje?"
+AI: { 
+  "intent": "REPORT", 
+  "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "TODAY" }, 
+  "message": "Aqui está sua agenda de hoje:",
+  "spokenMessage": "Aqui está sua agenda de hoje."
 }
 `;
 
