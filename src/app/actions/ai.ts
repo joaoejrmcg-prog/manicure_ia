@@ -212,8 +212,16 @@ export async function processCommand(input: string, history: string[] = [], inpu
   // 2. Generate Audio with OpenAI (if voice input)
   let audioData: string | undefined = undefined;
 
-  // 2. Generate Audio with OpenAI (if voice input)
-  // 2. Generate Audio with OpenAI (if voice input)
+  // Force generic audio for success actions to ensure cache hits and consistency
+  if (['ADD_CLIENT', 'DELETE_LAST_ACTION', 'REGISTER_EXPENSE'].includes(parsedResponse.intent)) {
+    parsedResponse.spokenMessage = "OK";
+  }
+  if (['SCHEDULE_SERVICE', 'REGISTER_SALE'].includes(parsedResponse.intent)) {
+    // Only force OK if it's not asking for more info (CONFIRMATION_REQUIRED handles questions)
+    // If the intent is final, we assume success.
+    parsedResponse.spokenMessage = "OK";
+  }
+
   const finalMessage = parsedResponse.message || "Comando processado.";
   const spokenMessage = parsedResponse.spokenMessage || finalMessage; // Use spokenMessage if available, else fallback to full message
 

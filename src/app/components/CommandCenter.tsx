@@ -136,28 +136,38 @@ export default function CommandCenter() {
             const cachedAudio = localStorage.getItem(cacheKey);
 
             let audioToPlay = cachedAudio;
+            let shouldCache = false;
 
             if (!audioToPlay) {
                 if (serverAudioData) {
                     audioToPlay = serverAudioData;
+                    shouldCache = true;
                 } else {
                     // Generate on demand if not provided
                     const generated = await generateAudio(text);
-                    if (generated) audioToPlay = generated;
-                }
-
-                // Cache it if we found/generated it
-                if (audioToPlay) {
-                    try {
-                        localStorage.setItem(cacheKey, audioToPlay);
-                    } catch (e) {
-                        console.warn("Storage full, skipping cache");
+                    if (generated) {
+                        audioToPlay = generated;
+                        shouldCache = true;
                     }
                 }
             }
 
             if (audioToPlay) {
+                // PLAY FIRST!
                 const audio = new Audio(`data:audio/mp3;base64,${audioToPlay}`);
+
+                // Cache in background (don't await)
+                if (shouldCache) {
+                    setTimeout(() => {
+                        try {
+                            localStorage.setItem(cacheKey, audioToPlay!);
+                            console.log("💾 Audio cached in background");
+                        } catch (e) {
+                            console.warn("Storage full, skipping cache");
+                        }
+                    }, 0);
+                }
+
                 await new Promise<void>((resolve) => {
                     audio.onended = () => resolve();
                     audio.play().catch(e => {
