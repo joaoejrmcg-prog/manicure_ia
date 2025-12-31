@@ -122,9 +122,10 @@ export default function CommandCenter() {
         return true;
     };
 
-    const playAudioWithCache = async (text: string, serverAudioData?: string) => {
-        console.log(`🔊 playAudioWithCache called for: "${text}" | InputType: ${inputType}`);
-        if (inputType !== 'voice') {
+    const playAudioWithCache = async (text: string, serverAudioData?: string, forcedInputType?: 'text' | 'voice') => {
+        const effectiveInputType = forcedInputType || inputType;
+        console.log(`🔊 playAudioWithCache called for: "${text}" | InputType: ${effectiveInputType}`);
+        if (effectiveInputType !== 'voice') {
             console.log("🔇 Skipping audio: inputType is not voice");
             return;
         }
@@ -382,7 +383,7 @@ export default function CommandCenter() {
                                     client_id: newClient.id
                                 });
                                 addMessage('assistant', `Venda registrada: R$${originalData.amount} (${originalData.service || 'Venda'})`, 'success');
-                                await playAudioWithCache("Pronto, registrado.");
+                                await playAudioWithCache("Pronto, registrado.", undefined, 'voice');
                             }
                         } else if (conversationState.data.originalIntent.intent === 'SCHEDULE_SERVICE') {
                             // Date parsing logic
@@ -403,8 +404,10 @@ export default function CommandCenter() {
                             const msg = `Agendado: ${originalData.service} para ${newClient.name} em ${dateStr}.`;
                             addMessage('assistant', msg, 'success');
 
+
+
                             // Use a short confirmation for audio, but cache it
-                            await playAudioWithCache("Pronto, agendado.");
+                            await playAudioWithCache("Pronto, agendado.", undefined, 'voice');
                         }
                     } catch (resumptionError) {
                         console.error("Erro na retomada:", resumptionError);
@@ -470,7 +473,7 @@ export default function CommandCenter() {
                     // Client not found -> Trigger Add Client Flow
                     const msg = `Não encontrei o cliente "${clientName}". Deseja cadastrá-lo agora?`;
                     addMessage('assistant', msg);
-                    await playAudioWithCache(msg);
+                    await playAudioWithCache(msg, undefined, 'voice');
 
                     setConversationState({
                         type: 'CONFIRM_ADD_CLIENT',
@@ -541,12 +544,15 @@ export default function CommandCenter() {
 
         // 2. Standard AI Processing (Server Action)
         try {
+            // Capture inputType at the start of the request to avoid state drift
+            const currentInputType = inputType;
+
             // Prepare history (last 10 messages)
             const history = messages.slice(-10).map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`);
-            const response = await processCommand(userInput, history, inputType);
+            const response = await processCommand(userInput, history, currentInputType);
 
             if (response.spokenMessage || response.audio) {
-                await playAudioWithCache(response.spokenMessage || response.message, response.audio);
+                await playAudioWithCache(response.spokenMessage || response.message, response.audio, currentInputType);
             }
 
             // Handle specific intents that require client-side logic
