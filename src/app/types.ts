@@ -36,4 +36,5 @@ export interface AIResponse {
     data?: any;
     message: string; // Human readable explanation of what was understood
     confidence: number;
+    audio?: string; // Base64 audio data
 }

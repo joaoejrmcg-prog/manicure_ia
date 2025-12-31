@@ -1,10 +1,16 @@
 "use server";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { AIResponse, IntentType } from "../types";
 
-// Helper to get all available API keys
-const getApiKeys = () => {
+// Initialize OpenAI for TTS only
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Helper to get all available Gemini API keys
+const getGeminiApiKeys = () => {
   const keys = [
     process.env.GOOGLE_GEN_AI_KEY,
     process.env.GEMINI_API_KEY,
@@ -24,11 +30,11 @@ Você é a assistente virtual de um prestador de serviços (SaaS). Sua função 
 Você deve agir como uma secretária eficiente, educada e objetiva.
 
 ### REGRAS DE COMPORTAMENTO (CRÍTICO):
-1. **CONFIRMATION LOOP (SEGURANÇA):**
-   - Antes de qualquer ação que altere dados (Agendar, Cadastrar, Registrar Venda/Despesa), você DEVE pedir confirmação.
-   - Retorne "intent": "CONFIRMATION_REQUIRED" e no "message" pergunte explicitamente.
-   - **IMPORTANTE:** Se faltar algum dado obrigatório (ex: forma de pagamento na venda), retorne "CONFIRMATION_REQUIRED" com os dados que você já tem, e na "message" pergunte o dado que falta.
-   - SÓ execute a ação final (retornar o intent real) se o usuário disser "Sim", "Confirmar", "Pode", etc.
+1. **EXECUÇÃO DIRETA (SEM CONFIRMAÇÃO):**
+   - Se você entender a intenção e tiver todos os dados necessários, RETORNE A AÇÃO IMEDIATAMENTE.
+   - NÃO peça confirmação ("Posso agendar?", "Confirma?"). Apenas faça.
+   - Responda com "Agendado...", "Registrado...", "Feito...".
+   - **EXCEÇÃO:** Se faltar algum dado OBRIGATÓRIO (ex: forma de pagamento na venda), retorne "CONFIRMATION_REQUIRED" e pergunte APENAS o dado que falta.
 
 2. **INTENÇÕES (INTENTS):**
    - ADD_CLIENT: Cadastrar cliente. (Requer: name).
@@ -56,32 +62,26 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
 3. **FORMATO DE RESPOSTA (JSON PURO):**
    {
      "intent": "TIPO_DA_INTENCAO",
-     "data": { ...dados extraídos, sempre inclua originalIntent se for CONFIRMATION_REQUIRED... },
-     "message": "Texto que será falado/exibido para o usuário"
+     "data": { ...dados extraídos... },
+     "message": "Texto que será falado/exibido para o usuário (Afirmativo: 'Agendei...', 'Registrei...')"
    }
 
 ### EXEMPLOS DE FLUXO:
 
-**Cenário 1: Agendamento (Fluxo Correto)**
+**Cenário 1: Agendamento (Fluxo Direto)**
 User: "Marca a Maria amanhã as 10 pra fazer unha"
-AI: {
-  "intent": "CONFIRMATION_REQUIRED",
-  "data": { "originalIntent": "SCHEDULE_SERVICE", "service": "unha", "clientName": "Maria", "isoDate": "2023-10-28T10:00:00" },
-  "message": "Entendi. Agendar unha para Maria amanhã (28/10) às 10h. Confirma?"
-}
-User: "Sim"
 AI: {
   "intent": "SCHEDULE_SERVICE",
   "data": { "service": "unha", "clientName": "Maria", "isoDate": "2023-10-28T10:00:00" },
-  "message": "Agendado com sucesso."
+  "message": "Combinado. Agendei unha para Maria amanhã às 10h."
 }
 
-**Cenário 2: Venda sem forma de pagamento**
+**Cenário 2: Venda sem forma de pagamento (Dado Faltante)**
 User: "A Maria pagou 50 reais na unha"
 AI: {
   "intent": "CONFIRMATION_REQUIRED",
   "data": { "originalIntent": "REGISTER_SALE", "service": "unha", "clientName": "Maria", "amount": 50 },
-  "message": "Certo, R$ 50,00 da Maria (unha). Qual foi a forma de pagamento?"
+  "message": "Certo, R$ 50,00 da Maria. Qual foi a forma de pagamento?"
 }
 
 **Cenário 3: Diferença Venda vs Despesa**
@@ -97,30 +97,28 @@ AI: {
   "data": {
     "clientName": "Valdir",
     "service": "vistoria",
-    "isoDate": "2023-11-07T10:00:00" // Calculado: Terça da semana seguinte ao contexto atual
+    "isoDate": "2023-11-07T10:00:00"
   },
-  "message": "Agendado: vistoria para Valdir na terça (07/11) às 10h."
+  "message": "Pronto. Agendei vistoria para Valdir na terça (07/11) às 10h."
 }
 
 **Cenário 5: Múltiplas Ações**
-User: "Cadastra o Felipe, marca ele pra terça às 10h e anota que ele já pagou 50 reais de sinal"
+User: "Cadastra o Felipe, marca ele pra terça às 10h e anota que ele já pagou 50 reais de sinal no pix"
 AI: {
-  "intent": "CONFIRMATION_REQUIRED",
+  "intent": "MULTI_ACTION",
   "data": {
-    "originalIntent": "MULTI_ACTION",
     "actions": [
       { "intent": "ADD_CLIENT", "data": { "name": "Felipe" } },
       { "intent": "SCHEDULE_SERVICE", "data": { "clientName": "Felipe", "service": "Serviço Geral", "isoDate": "2023-12-30T10:00:00" } },
-      { "intent": "REGISTER_SALE", "data": { "clientName": "Felipe", "service": "Sinal", "amount": 50, "paymentMethod": "Dinheiro" } }
+      { "intent": "REGISTER_SALE", "data": { "clientName": "Felipe", "service": "Sinal", "amount": 50, "paymentMethod": "Pix" } }
     ]
   },
-  "message": "Entendi. Confirma: 1. Cadastrar Felipe. 2. Agendar terça 10h. 3. Registrar sinal de R$ 50?"
+  "message": "Feito! Cadastrei o Felipe, agendei para terça às 10h e registrei o pagamento de R$ 50."
 }
 
 **Cenário 6: Relatórios**
 User: "O que tem pra hoje?"
-AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "TODAY" }, "message": "Consultando agenda de hoje..." }
-
+AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "TODAY" }, "message": "Aqui está sua agenda de hoje:" }
 User: "Quanto ganhei hoje?"
 AI: { "intent": "REPORT", "data": { "entity": "FINANCIAL", "metric": "SUM", "period": "TODAY", "filter": "INCOME" }, "message": "Calculando ganhos de hoje..." }
 
@@ -128,10 +126,10 @@ User: "Agenda de Janeiro"
 AI: { "intent": "REPORT", "data": { "entity": "APPOINTMENT", "metric": "LIST", "period": "MONTH", "targetMonth": 1, "targetYear": 2026 }, "message": "Consultando agenda de Janeiro..." }
 `;
 
-export async function processCommand(input: string, history: string[] = []): Promise<AIResponse> {
-  const apiKeys = getApiKeys();
+export async function processCommand(input: string, history: string[] = [], inputType: 'text' | 'voice' = 'text'): Promise<AIResponse> {
+  const geminiKeys = getGeminiApiKeys();
 
-  if (apiKeys.length === 0) {
+  if (geminiKeys.length === 0) {
     return {
       intent: 'UNKNOWN',
       message: "Erro: Nenhuma chave da API do Gemini configurada.",
@@ -139,10 +137,12 @@ export async function processCommand(input: string, history: string[] = []): Pro
     };
   }
 
-  const targetModel = "gemini-2.5-flash";
+  const targetModel = "gemini-2.0-flash-exp"; // Or gemini-1.5-flash if preferred
   let lastError: any = null;
+  let parsedResponse: any = null;
 
-  for (const [index, apiKey] of apiKeys.entries()) {
+  // 1. Process Logic with Gemini (with fallback/rotation)
+  for (const [index, apiKey] of geminiKeys.entries()) {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
@@ -153,10 +153,10 @@ export async function processCommand(input: string, history: string[] = []): Pro
       const now = new Date();
       const timeContext = `Contexto Temporal: Hoje é ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}. Dia da semana: ${now.toLocaleDateString('pt-BR', { weekday: 'long' })}.`;
 
-      let prompt = `${timeContext}\n\n`;
+      let prompt = `${timeContext} \n\n`;
       if (history.length > 0) {
         prompt += "Histórico da conversa:\n";
-        history.forEach(msg => prompt += `${msg}\n`);
+        history.forEach(msg => prompt += `${msg} \n`);
         prompt += "\nNova mensagem do usuário:\n";
       }
       prompt += input;
@@ -166,36 +166,57 @@ export async function processCommand(input: string, history: string[] = []): Pro
       const text = response.text();
 
       const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanText);
+      parsedResponse = JSON.parse(cleanText);
 
-      return {
-        intent: parsed.intent as IntentType,
-        data: parsed.data,
-        message: parsed.message || "Comando processado.",
-        confidence: 0.9
-      };
+      // If successful, break the loop
+      break;
 
     } catch (error: any) {
-      console.warn(`⚠️ Falha na Chave ${index + 1} (${apiKey.substring(0, 5)}...): ${error.message}`);
+      console.warn(`⚠️ Falha na Chave Gemini ${index + 1} (${apiKey.substring(0, 5)}...): ${error.message}`);
       lastError = error;
       continue;
     }
   }
 
-  console.error("=== TODAS AS CHAVES FALHARAM ===");
-  console.error("Último erro:", lastError?.message);
-
-  if (lastError?.message?.includes('429') || lastError?.message?.includes('Quota exceeded')) {
+  if (!parsedResponse) {
+    console.error("=== TODAS AS CHAVES GEMINI FALHARAM ===");
     return {
       intent: 'UNKNOWN',
-      message: "⚠️ Todas as chaves de API atingiram o limite. Tente novamente mais tarde.",
+      message: lastError?.message?.includes('429')
+        ? "⚠️ Todas as chaves de API atingiram o limite. Tente novamente mais tarde."
+        : `Erro técnico no Gemini: ${lastError?.message || "Problema desconhecido"}`,
       confidence: 0
     };
   }
 
+  // 2. Generate Audio with OpenAI (if voice input)
+  let audioData: string | undefined = undefined;
+
+  if (inputType === 'voice' && parsedResponse.message) {
+    if (!process.env.OPENAI_API_KEY) {
+      console.warn("⚠️ OPENAI_API_KEY missing, skipping TTS generation.");
+    } else {
+      try {
+        const mp3 = await openai.audio.speech.create({
+          model: "tts-1",
+          voice: "nova",
+          input: parsedResponse.message,
+        });
+
+        const buffer = Buffer.from(await mp3.arrayBuffer());
+        audioData = buffer.toString('base64');
+      } catch (audioError) {
+        console.error("Error generating OpenAI audio:", audioError);
+        // Don't fail the whole request if audio fails
+      }
+    }
+  }
+
   return {
-    intent: 'UNKNOWN',
-    message: `Erro técnico: ${lastError?.message || "Problema desconhecido"}`,
-    confidence: 0
+    intent: parsedResponse.intent as IntentType,
+    data: parsedResponse.data,
+    message: parsedResponse.message || "Comando processado.",
+    confidence: 0.9,
+    audio: audioData
   };
 }

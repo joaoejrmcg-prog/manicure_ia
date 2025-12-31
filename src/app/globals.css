@@ -10,3 +10,63 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes orb-float-1 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  33% {
+    transform: translate(30px, -50px) scale(1.1) rotate(120deg);
+  }
+
+  66% {
+    transform: translate(-20px, 20px) scale(0.9) rotate(240deg);
+  }
+}
+
+@keyframes orb-float-2 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  33% {
+    transform: translate(-30px, 40px) scale(1.1) rotate(-120deg);
+  }
+
+  66% {
+    transform: translate(20px, -30px) scale(0.9) rotate(-240deg);
+  }
+}
+
+@keyframes orb-float-3 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+
+  33% {
+    transform: translate(20px, -20px) scale(1.2) rotate(60deg);
+  }
+
+  66% {
+    transform: translate(-20px, 40px) scale(0.8) rotate(120deg);
+  }
+}
+
+.animate-orb-1 {
+  animation: orb-float-1 8s infinite ease-in-out;
+}
+
+.animate-orb-2 {
+  animation: orb-float-2 10s infinite ease-in-out reverse;
+}
+
+.animate-orb-3 {
+  animation: orb-float-3 12s infinite ease-in-out;
+}

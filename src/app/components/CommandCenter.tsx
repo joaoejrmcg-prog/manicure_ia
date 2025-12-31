@@ -9,6 +9,7 @@ import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { checkAndIncrementUsage, getDailyUsage } from "../actions/usage";
+import { VoiceOrb } from "./VoiceOrb";
 
 type Message = {
     id: string;
@@ -27,11 +28,13 @@ type ConversationState =
 export default function CommandCenter() {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<Message[]>([
-        { id: '1', role: 'assistant', content: 'Olá! Sou sua secretária. Posso agendar um compromisso, lançar uma conta que você recebeu ou pagou e ainda cadastrar um cliente. Vamos começar?' }
+        { id: '1', role: 'assistant', content: 'Olá! Sou sua secretária. Vamos começar?' }
     ]);
     const [conversationState, setConversationState] = useState<ConversationState>({ type: 'IDLE' });
     const [isProcessing, setIsProcessing] = useState(false);
     const [usageCount, setUsageCount] = useState(0);
+    const [inputType, setInputType] = useState<'text' | 'voice'>('text');
+    const [isSpeaking, setIsSpeaking] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -54,6 +57,7 @@ export default function CommandCenter() {
     useEffect(() => {
         if (transcript) {
             setInput(transcript);
+            setInputType('voice');
         }
     }, [transcript]);
 
@@ -462,7 +466,26 @@ export default function CommandCenter() {
         try {
             // Prepare history (last 10 messages)
             const history = messages.slice(-10).map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`);
-            const response = await processCommand(userInput, history);
+            const response = await processCommand(userInput, history, inputType);
+
+            if (response.audio) {
+                try {
+                    setIsSpeaking(true);
+                    const audio = new Audio(`data:audio/mp3;base64,${response.audio}`);
+
+                    await new Promise<void>((resolve) => {
+                        audio.onended = () => resolve();
+                        audio.play().catch(e => {
+                            console.error("Audio play error:", e);
+                            resolve(); // Resolve anyway to show text
+                        });
+                    });
+                } catch (e) {
+                    console.error("Error playing audio:", e);
+                } finally {
+                    setIsSpeaking(false);
+                }
+            }
 
             // Handle specific intents that require client-side logic
             switch (response.intent) {
@@ -797,7 +820,7 @@ export default function CommandCenter() {
                     >
                         <div
                             className={cn(
-                                "max-w-[80%] rounded-2xl px-4 py-3 text-lg",
+                                "max-w-full md:max-w-[80%] rounded-2xl px-4 py-3 text-lg",
                                 msg.role === 'user'
                                     ? "bg-blue-600 text-white rounded-tr-none"
                                     : cn(
@@ -826,7 +849,10 @@ export default function CommandCenter() {
                     <textarea
                         ref={textareaRef}
                         value={input}
-                        onChange={(e) => setInput(e.target.value)}
+                        onChange={(e) => {
+                            setInput(e.target.value);
+                            setInputType('text');
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
@@ -865,6 +891,9 @@ export default function CommandCenter() {
                     Enter para enviar • Shift + Enter para quebrar linha
                 </p>
             </div>
+            {(isListening || (isProcessing && inputType === 'voice') || isSpeaking) && (
+                <VoiceOrb mode={isSpeaking ? 'SPEAKING' : (isProcessing ? 'PROCESSING' : 'LISTENING')} />
+            )}
         </div>
     );
 }

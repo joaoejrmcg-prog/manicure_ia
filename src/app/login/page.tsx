@@ -145,6 +145,12 @@ function LoginForm() {
 
                 <p className="text-center text-xs text-neutral-600 mt-8">
                     &copy; 2025 Meu Negócio. Gestão Inteligente.
+                    <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('open-terms-modal'))}
+                        className="ml-2 underline hover:text-blue-400 transition-colors"
+                    >
+                        Termos de Uso
+                    </button>
                 </p>
             </div>
         </div>
