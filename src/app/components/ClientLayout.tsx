@@ -13,6 +13,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAuthCallback, setIsAuthCallback] = useState(false);
 
     const publicRoutes = ['/login', '/forgot-password', '/update-password'];
     const isPublicPage = publicRoutes.includes(pathname);
@@ -61,22 +62,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         setIsSidebarOpen(false);
     }, [pathname]);
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-            </div>
-        );
-    }
-
-    if (isPublicPage) {
-        return <>{children}</>;
-    }
-
-    const [isAuthCallback, setIsAuthCallback] = useState(false);
-
+    // Check for auth code on mount to avoid hydration mismatch
     useEffect(() => {
-        // Check for auth code on mount to avoid hydration mismatch
         if (typeof window !== 'undefined' && window.location.search.includes('code=')) {
             setIsAuthCallback(true);
         }
@@ -91,6 +78,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             return () => clearTimeout(timer);
         }
     }, [isAuthenticated, isAuthCallback, isPublicPage, isLoading]);
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
+
+    if (isPublicPage) {
+        return <>{children}</>;
+    }
 
     if (!isAuthenticated && !isAuthCallback) {
         // Show loading state instead of null (black screen) while redirecting
