@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 import { sendSupportMessage, getUserMessages } from '../actions/support';
 import { HelpCircle, Mail, MessageSquare, ChevronDown, ChevronUp, Send, Clock, CheckCircle2 } from 'lucide-react';
@@ -109,6 +111,31 @@ export default function AjudaPage() {
                             <Clock className="w-5 h-5" />
                             Minhas Mensagens (Últimos 30 dias)
                         </h2>
+
+                        {/* Pending Message Alert */}
+                        {!loadingMessages && userMessages.some(m => m.status === 'pending') && (
+                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                                <div className="p-2 bg-blue-500/20 rounded-lg">
+                                    <Clock className="w-5 h-5 text-blue-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-blue-400 mb-1">Solicitação em Análise</h3>
+                                    <p className="text-sm text-neutral-300">
+                                        Recebemos sua solicitação há {(() => {
+                                            const oldestPending = userMessages
+                                                .filter(m => m.status === 'pending')
+                                                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
+
+                                            const diffTime = Math.abs(new Date().getTime() - new Date(oldestPending.created_at).getTime());
+                                            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                                            return diffDays === 0 ? 'algumas horas' : `${diffDays} dia${diffDays > 1 ? 's' : ''}`;
+                                        })()}.
+                                        Nossa equipe já está trabalhando para te atender o mais rápido possível. Fique atento, a resposta aparecerá aqui!
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-4">
                             {loadingMessages ? (

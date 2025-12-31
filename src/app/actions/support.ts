@@ -3,12 +3,9 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function sendSupportMessage(formData: FormData) {
-    const subject = formData.get('subject') as string;
-    const message = formData.get('message') as string;
-
+async function getSupabase() {
     const cookieStore = await cookies();
-    const supabase = createServerClient(
+    return createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
@@ -21,6 +18,13 @@ export async function sendSupportMessage(formData: FormData) {
             },
         }
     );
+}
+
+export async function sendSupportMessage(formData: FormData) {
+    const subject = formData.get('subject') as string;
+    const message = formData.get('message') as string;
+
+    const supabase = await getSupabase();
 
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
@@ -47,6 +51,7 @@ export async function sendSupportMessage(formData: FormData) {
 
     return { success: true };
 }
+
 export async function getUserMessages() {
     try {
         const supabase = await getSupabase();
