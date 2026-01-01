@@ -32,6 +32,7 @@ function LoginForm() {
                     email,
                     password,
                     options: {
+                        emailRedirectTo: `${window.location.origin}/`,
                         data: {
                             referral_code: referralCode
                         }
