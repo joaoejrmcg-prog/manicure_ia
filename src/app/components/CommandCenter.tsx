@@ -823,6 +823,7 @@ export default function CommandCenter() {
                                 addMessage('assistant', `Agenda:\n${list}`, 'text');
                             }
                         }
+
                     }
                     else if (entity === 'FINANCIAL') {
                         const records = await DataManager.getFinancialSummary();
@@ -871,6 +872,13 @@ export default function CommandCenter() {
                         } else {
                             addMessage('assistant', "Não tenho dados suficientes para determinar o melhor cliente.", 'text');
                         }
+                    }
+                    break;
+
+                case 'NAVIGATE':
+                    if (response.data?.route) {
+                        addMessage('assistant', response.message, 'success');
+                        router.push(response.data.route);
                     }
                     break;
 

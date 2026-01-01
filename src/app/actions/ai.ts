@@ -72,6 +72,9 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
        - Cadastro de Serviços ("Cadastra um serviço novo", "Cria o serviço de massagem").
        - Pagamento Parcial ("Paguei metade agora e metade depois").
      - Ação: Retorne message: "Ainda não tenho essa funcionalidade no momento."
+   - NAVIGATE: Navegar para uma tela específica.
+     - "data": { "route": "/clients" | "/agenda" | "/financial" | "/dashboard" }
+     - Gatilhos: "Quero ver meus clientes", "Me mostra o financeiro", "Abrir agenda", "Voltar pro início", "Ir para clientes".
    - UNKNOWN: Não entendeu ou falta dados críticos que impedem até de perguntar.
 
 3. **FORMATO DE RESPOSTA (JSON PURO):**
