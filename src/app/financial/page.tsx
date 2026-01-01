@@ -187,9 +187,8 @@ export default function FinancialPage() {
     const currentYear = currentDate.getFullYear();
 
     const handleGenerateReport = () => {
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
+        const currentMonth = currentDate.getMonth();
+        const currentYear = currentDate.getFullYear();
 
         const monthlyRecords = records.filter(r => {
             const date = new Date(r.created_at);
@@ -200,7 +199,7 @@ export default function FinancialPage() {
         const expense = monthlyRecords.filter(r => r.type === 'expense').reduce((acc, r) => acc + r.amount, 0);
         const balance = income - expense;
 
-        const monthName = now.toLocaleString('pt-BR', { month: 'long' });
+        const monthName = currentDate.toLocaleString('pt-BR', { month: 'long' });
         const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
         const message = `📊 *Relatório Financeiro - ${capitalizedMonth}/${currentYear}*
