@@ -249,17 +249,24 @@ export const DataManager = {
         return true;
     },
 
-    getFinancialSummary: async () => {
+    getFinancialSummary: async (startDate?: string, endDate?: string) => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Usuário não autenticado");
 
-        // For MVP, just getting last 50 records
-        const { data, error } = await supabase
+        let query = supabase
             .from('financial_records')
             .select('*, client:clients(name)')
             .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(500);
+            .order('created_at', { ascending: false });
+
+        if (startDate && endDate) {
+            query = query.gte('created_at', startDate).lte('created_at', endDate);
+        } else {
+            // Fallback for no date range (e.g. initial load if not provided, though we plan to always provide it)
+            query = query.limit(500);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         return data as FinancialRecord[];

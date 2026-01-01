@@ -41,7 +41,15 @@ export default async function IndiquePage() {
     const paidReferrals = stats?.paidReferred || 0;
     const earnedDays = stats?.earnedDays || 0;
 
-    const referralLink = `${process.env.NEXT_PUBLIC_APP_URL || 'https://meu-nogocio-ia.vercel.app'}/login?ref=${referralCode}`;
+    // Dynamically determine the base URL
+    const headersList = await cookies(); // cookies() was already awaited above, but we need headers()
+    const { headers } = await import('next/headers');
+    const headerList = await headers();
+    const host = headerList.get('host') || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    const referralLink = `${baseUrl}/login?ref=${referralCode}`;
 
 
     return (
@@ -55,7 +63,7 @@ export default async function IndiquePage() {
                     <Gift size={48} className="mx-auto mb-2 opacity-90" />
                     <h1 className="text-2xl font-bold">Indique e Ganhe</h1>
                     <p className="text-blue-100 text-sm mt-1">
-                        Ganhe 30 dias de acesso VIP para cada amigo que assinar!
+                        Ganhe 30 dias de acesso VIP por cada amigo que assinar!
                     </p>
                 </div>
 

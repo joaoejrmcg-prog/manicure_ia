@@ -158,11 +158,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         <span className="font-medium">Perfil</span>
                     </Link>
                     <Link
-                        href="/indique"
+                        href="/referral"
                         onClick={() => onClose?.()}
                         className={cn(
                             "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 border",
-                            pathname === "/indique"
+                            pathname === "/referral"
                                 ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                 : "text-blue-400 border-blue-500/20 hover:bg-blue-500/10"
                         )}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { DataManager } from "../lib/data-manager";
 import { FinancialRecord, Client } from "../types";
-import { Plus, Search, Edit2, Trash2, X, Save, DollarSign, TrendingUp, TrendingDown, Calendar, CreditCard, User, Share2 } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, X, Save, DollarSign, TrendingUp, TrendingDown, Calendar, CreditCard, User, Share2, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { cn } from "../lib/utils";
 
 export default function FinancialPage() {
@@ -12,6 +12,8 @@ export default function FinancialPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+    const [paymentFilter, setPaymentFilter] = useState<'all' | 'money' | 'pix' | 'card' | 'other'>('all');
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState<FinancialRecord | null>(null);
 
@@ -33,8 +35,17 @@ export default function FinancialPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            // First day of the month
+            const startDate = new Date(year, month, 1).toISOString();
+
+            // Last day of the month
+            const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
+
             const [recordsData, clientsData] = await Promise.all([
-                DataManager.getFinancialSummary(),
+                DataManager.getFinancialSummary(startDate, endDate),
                 DataManager.getClients()
             ]);
             setRecords(recordsData);
@@ -48,7 +59,26 @@ export default function FinancialPage() {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [currentDate]); // Reload when date changes
+
+    const handlePrevMonth = () => {
+        setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    };
+
+    const handleNextMonth = () => {
+        setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    };
+
+    const getPaymentCategory = (method?: string): 'money' | 'pix' | 'card' | 'other' => {
+        if (!method) return 'other';
+        const m = method.toLowerCase();
+
+        if (m.includes('dinheiro') || m.includes('cash')) return 'money';
+        if (m.includes('pix') || m.includes('pics')) return 'pix';
+        if (m.includes('cartão') || m.includes('cartao') || m.includes('card')) return 'card';
+
+        return 'other';
+    };
 
     const handleOpenForm = (record?: FinancialRecord) => {
         if (record) {
@@ -118,12 +148,43 @@ export default function FinancialPage() {
         const matchesSearch = r.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
             r.client?.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesType = filterType === 'all' || r.type === filterType;
-        return matchesSearch && matchesType;
+
+        // Payment filter only applies to income (Receitas) as per requirement
+        // "Dentro de cada mes preciso que filtre (dentro de receitas)..."
+        let matchesPayment = true;
+        if (filterType === 'income' && paymentFilter !== 'all' && r.type === 'income') {
+            const category = getPaymentCategory(r.payment_method);
+            matchesPayment = category === paymentFilter;
+        }
+
+        return matchesSearch && matchesType && matchesPayment;
     });
 
     const totalBalance = records.reduce((acc, r) => {
         return r.type === 'income' ? acc + r.amount : acc - r.amount;
     }, 0);
+
+    const filteredTotal = filteredRecords.reduce((acc, r) => {
+        // If we are filtering by payment method (which implies income), we just sum positive amounts
+        // If we are showing all, we sum income - expense
+        // But the requirement says "Após cada filtro o valor total dos resultados deve aparecer na tela."
+        // So we should just sum the amounts of the visible records?
+        // If I'm seeing "Receitas" -> "Pix", I want to see the total of Pix.
+        // If I'm seeing "Despesas", I want to see total expenses.
+        // If I'm seeing "Todos", I want to see the balance? Or just the sum?
+        // Usually "Total dos resultados" implies sum of amounts.
+        // But for "Todos", mixing income and expense, balance makes more sense.
+
+        if (filterType === 'all') {
+            return r.type === 'income' ? acc + r.amount : acc - r.amount;
+        } else {
+            return acc + r.amount;
+        }
+    }, 0);
+
+    const monthName = currentDate.toLocaleString('pt-BR', { month: 'long' });
+    const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    const currentYear = currentDate.getFullYear();
 
     const handleGenerateReport = () => {
         const now = new Date();
@@ -159,7 +220,17 @@ _Gerado por Meu Negócio IA_`;
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-neutral-100">Financeiro</h1>
-                    <p className="text-neutral-400 text-sm">Controle suas receitas e despesas</p>
+                    <div className="flex items-center gap-2 text-neutral-400 text-sm mt-1">
+                        <button onClick={handlePrevMonth} className="p-1 hover:bg-neutral-800 rounded-lg transition-colors">
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="font-medium text-neutral-200 min-w-[140px] text-center capitalize">
+                            {capitalizedMonth} {currentYear}
+                        </span>
+                        <button onClick={handleNextMonth} className="p-1 hover:bg-neutral-800 rounded-lg transition-colors">
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -187,10 +258,23 @@ _Gerado por Meu Negócio IA_`;
                         <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
                             <DollarSign className="w-4 h-4" />
                         </div>
-                        <span className="text-sm text-neutral-400">Saldo Total</span>
+                        <span className="text-sm text-neutral-400">Saldo de {capitalizedMonth}</span>
                     </div>
                     <p className={cn("text-2xl font-bold", totalBalance >= 0 ? "text-green-400" : "text-red-400")}>
                         R$ {totalBalance.toFixed(2)}
+                    </p>
+                </div>
+
+                {/* Filtered Total Card */}
+                <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+                            <Filter className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm text-neutral-400">Total Filtrado</span>
+                    </div>
+                    <p className={cn("text-2xl font-bold", filteredTotal >= 0 ? "text-neutral-200" : "text-red-400")}>
+                        R$ {filteredTotal.toFixed(2)}
                     </p>
                 </div>
                 {/* Add more summary cards if needed (Income/Expense totals) */}
@@ -225,6 +309,29 @@ _Gerado por Meu Negócio IA_`;
                     ))}
                 </div>
             </div>
+
+            {/* Payment Method Filters (Only for Income) */}
+            {filterType === 'income' && (
+                <div className="flex flex-wrap gap-2">
+                    {(['all', 'money', 'pix', 'card', 'other'] as const).map((type) => (
+                        <button
+                            key={type}
+                            onClick={() => setPaymentFilter(type)}
+                            className={cn(
+                                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                                paymentFilter === type
+                                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700"
+                            )}
+                        >
+                            {type === 'all' ? 'Todas Formas' :
+                                type === 'money' ? 'Dinheiro' :
+                                    type === 'pix' ? 'Pix' :
+                                        type === 'card' ? 'Cartão' : 'Outros'}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* List */}
             {isLoading ? (

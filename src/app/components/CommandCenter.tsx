@@ -800,6 +800,16 @@ export default function CommandCenter() {
                         const filtered = appointments.filter(a => {
                             const d = new Date(a.date_time);
                             if (period === 'TODAY') return d.toDateString() === today.toDateString();
+                            if (period === 'TOMORROW') {
+                                const tomorrow = new Date(today);
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                return d.toDateString() === tomorrow.toDateString();
+                            }
+                            if (period === 'NEXT_MONTH') {
+                                const nextMonth = new Date(today);
+                                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                return d.getMonth() === nextMonth.getMonth() && d.getFullYear() === nextMonth.getFullYear();
+                            }
                             if (period === 'MONTH') {
                                 const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
                                 const targetY = response.data.targetYear || today.getFullYear();
@@ -830,6 +840,16 @@ export default function CommandCenter() {
                         const filtered = records.filter(r => {
                             const d = new Date(r.created_at);
                             if (period === 'TODAY') return d.toDateString() === today.toDateString();
+                            if (period === 'TOMORROW') {
+                                const tomorrow = new Date(today);
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                return d.toDateString() === tomorrow.toDateString();
+                            }
+                            if (period === 'NEXT_MONTH') {
+                                const nextMonth = new Date(today);
+                                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                return d.getMonth() === nextMonth.getMonth() && d.getFullYear() === nextMonth.getFullYear();
+                            }
                             if (period === 'MONTH') {
                                 const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
                                 const targetY = response.data.targetYear || today.getFullYear();
@@ -844,7 +864,7 @@ export default function CommandCenter() {
                         const total = finalRecords.reduce((sum, r) => sum + Number(r.amount), 0);
 
                         const label = typeFilter === 'income' ? 'Ganhos' : typeFilter === 'expense' ? 'Gastos' : 'Total';
-                        const periodLabel = period === 'TODAY' ? 'de hoje' : period === 'MONTH' ? 'deste mês' : 'total';
+                        const periodLabel = period === 'TODAY' ? 'de hoje' : period === 'TOMORROW' ? 'de amanhã' : period === 'NEXT_MONTH' ? 'do mês que vem' : period === 'MONTH' ? 'deste mês' : 'total';
                         addMessage('assistant', `${label} ${periodLabel}: R$ ${total.toFixed(2)}`, 'text');
                     }
                     else if (entity === 'CLIENT' && metric === 'BEST') {

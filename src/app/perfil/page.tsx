@@ -132,7 +132,7 @@ export default async function PerfilPage() {
                     </Link>
 
                     <Link
-                        href="/indique"
+                        href="/referral"
                         className="bg-gradient-to-br from-blue-600 to-indigo-600 p-6 rounded-2xl shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 transition-all duration-200 flex flex-col items-center gap-2 text-center text-white group"
                     >
                         <Gift className="group-hover:scale-110 transition-transform" size={32} />

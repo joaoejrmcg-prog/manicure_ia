@@ -55,7 +55,7 @@ Você deve agir como uma secretária eficiente, educada e objetiva.
      - "data": { 
          "entity": "APPOINTMENT" | "FINANCIAL" | "CLIENT", 
          "metric": "LIST" | "SUM" | "COUNT" | "BEST", 
-         "period": "TODAY" | "MONTH" | "NEXT_MONTH" | "ALL",
+         "period": "TODAY" | "TOMORROW" | "MONTH" | "NEXT_MONTH" | "ALL",
          "targetMonth": number (1-12, opcional),
          "targetYear": number (opcional),
          "filter": "INCOME" | "EXPENSE" | null 
