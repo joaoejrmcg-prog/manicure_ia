@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
             // DEBUG: Check if subscription exists
             const { data: subCheck, error: checkError } = await supabaseAdmin
                 .from('subscriptions')
-                .select('id, status, asaas_subscription_id')
+                .select('user_id, status')
                 .eq('asaas_subscription_id', subscriptionId)
                 .single();
 
