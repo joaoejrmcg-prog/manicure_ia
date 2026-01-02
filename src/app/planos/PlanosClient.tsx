@@ -13,6 +13,8 @@ interface PlanosClientProps {
 
 export default function PlanosClient({ currentPlan }: PlanosClientProps) {
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
     const router = useRouter();
 
     const plansData = [
@@ -42,8 +44,17 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
         },
     ];
 
-    const handleSelectPlan = async (planName: string) => {
+    const handleInitiateCheckout = (planName: string) => {
+        setSelectedPlan(planName);
+        setShowPaymentModal(true);
+    };
+
+    const handleConfirmPayment = async (billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD') => {
+        if (!selectedPlan) return;
+
         setIsLoading(true);
+        setShowPaymentModal(false);
+
         try {
             const supabase = createBrowserClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,7 +74,10 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`
                 },
-                body: JSON.stringify({ plan: planName.toLowerCase() })
+                body: JSON.stringify({
+                    plan: selectedPlan.toLowerCase(),
+                    billingType: billingType
+                })
             });
 
             const data = await response.json();
@@ -80,6 +94,7 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
             alert('Erro ao processar solicitação. Tente novamente.');
         } finally {
             setIsLoading(false);
+            setSelectedPlan(null);
         }
     };
 
@@ -107,6 +122,58 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                     </div>
                 )}
 
+                {/* Payment Method Modal */}
+                {showPaymentModal && (
+                    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm p-4">
+                        <div className="bg-neutral-900 p-6 rounded-xl border border-neutral-800 w-full max-w-md">
+                            <h2 className="text-xl font-bold text-white mb-4">Como deseja pagar?</h2>
+                            <p className="text-neutral-400 mb-6">Escolha a forma de pagamento para o plano <strong>{selectedPlan}</strong>.</p>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => handleConfirmPayment('PIX')}
+                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">💠</span>
+                                        <span className="font-medium text-white">Pix</span>
+                                    </div>
+                                    <span className="text-neutral-500 group-hover:text-white">→</span>
+                                </button>
+
+                                <button
+                                    onClick={() => handleConfirmPayment('BOLETO')}
+                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">📄</span>
+                                        <span className="font-medium text-white">Boleto Bancário</span>
+                                    </div>
+                                    <span className="text-neutral-500 group-hover:text-white">→</span>
+                                </button>
+
+                                <button
+                                    onClick={() => handleConfirmPayment('CREDIT_CARD')}
+                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">💳</span>
+                                        <span className="font-medium text-white">Cartão de Crédito</span>
+                                    </div>
+                                    <span className="text-neutral-500 group-hover:text-white">→</span>
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => setShowPaymentModal(false)}
+                                className="mt-6 w-full py-2 text-neutral-400 hover:text-white transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Grid de Planos */}
                 <div className="grid md:grid-cols-2 gap-6 mb-8">
                     {plansData.map((plan) => (
@@ -117,7 +184,7 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                             features={plan.features}
                             isCurrentPlan={currentPlan.toUpperCase() === plan.name}
                             isMostPopular={plan.isMostPopular}
-                            onSelect={() => handleSelectPlan(plan.name)}
+                            onSelect={() => handleInitiateCheckout(plan.name)}
                         />
                     ))}
                 </div>

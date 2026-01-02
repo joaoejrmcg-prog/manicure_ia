@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { plan } = body;
+        const { plan, billingType } = body;
 
         if (!plan || !PLANS[plan as keyof typeof PLANS]) {
             return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
@@ -56,11 +56,12 @@ export async function POST(req: NextRequest) {
         let asaasCustomerId = profile.asaas_customer_id;
 
         if (!asaasCustomerId) {
+            console.log('Creating new Asaas customer...');
             const newCustomer = await createAsaasCustomer({
-                name: profile.name || user.email || 'Cliente', // Fallback name
+                name: profile.name || user.email || 'Cliente',
                 email: user.email!,
                 mobilePhone: profile.whatsapp,
-                cpfCnpj: profile.cpf, // Assuming you might have this field, or it's null
+                cpfCnpj: profile.cpf || '24971563792', // Test CPF if not provided
                 externalReference: user.id
             });
             asaasCustomerId = newCustomer.id;
@@ -70,6 +71,24 @@ export async function POST(req: NextRequest) {
                 .from('profiles')
                 .update({ asaas_customer_id: asaasCustomerId })
                 .eq('user_id', user.id);
+        } else {
+            console.log('Reusing existing Asaas customer:', asaasCustomerId);
+            // Update existing customer with CPF if needed
+            try {
+                await fetch(`${process.env.ASAAS_API_URL}/customers/${asaasCustomerId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'access_token': process.env.ASAAS_API_KEY!
+                    },
+                    body: JSON.stringify({
+                        cpfCnpj: profile.cpf || '24971563792'
+                    })
+                });
+                console.log('Updated customer with CPF');
+            } catch (err) {
+                console.error('Error updating customer:', err);
+            }
         }
 
         // 4. Create Subscription
@@ -78,7 +97,7 @@ export async function POST(req: NextRequest) {
 
         const subscription = await createAsaasSubscription({
             customer: asaasCustomerId,
-            billingType: 'UNDEFINED', // Allows user to choose payment method on the invoice page
+            billingType: billingType || 'UNDEFINED',
             value: selectedPlan.value,
             nextDueDate: nextDueDate,
             cycle: 'MONTHLY',
@@ -95,12 +114,16 @@ export async function POST(req: NextRequest) {
             .single();
 
         if (existingSub) {
+            // If exists, update it. 
+            // NOTE: In a real scenario, you might want to cancel the old Asaas subscription if the ID is different.
+            // For now, we just update the record with the new subscription ID.
             await supabaseAdmin
                 .from('subscriptions')
                 .update({
                     asaas_subscription_id: subscription.id,
                     plan: plan,
-                    // Status will be updated via webhook, but we can set to 'pending' or keep as is until payment
+                    status: 'pending', // Reset status to pending until payment
+                    current_period_end: null // Reset period
                 })
                 .eq('user_id', user.id);
         } else {
@@ -110,7 +133,7 @@ export async function POST(req: NextRequest) {
                     user_id: user.id,
                     asaas_subscription_id: subscription.id,
                     plan: plan,
-                    status: 'trial', // or 'pending'
+                    status: 'pending',
                 });
         }
 

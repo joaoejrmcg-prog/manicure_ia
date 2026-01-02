@@ -81,7 +81,15 @@ export async function createAsaasSubscription(subscriptionData: {
             'Content-Type': 'application/json',
             'access_token': ASAAS_API_KEY!
         },
-        body: JSON.stringify(subscriptionData)
+        body: JSON.stringify({
+            customer: subscriptionData.customer,
+            billingType: subscriptionData.billingType,
+            value: subscriptionData.value,
+            nextDueDate: subscriptionData.nextDueDate,
+            cycle: subscriptionData.cycle,
+            description: subscriptionData.description,
+            externalReference: subscriptionData.externalReference
+        })
     });
 
     if (!response.ok) {
