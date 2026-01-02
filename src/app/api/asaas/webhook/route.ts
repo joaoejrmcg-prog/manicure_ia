@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const { event, payment } = body;
 
-        console.log(`Received Asaas Webhook: ${event}`, payment.id);
+        console.log(`Received Asaas Webhook: ${event}`, payment?.id);
 
         if (!payment || !payment.subscription) {
             // Not a subscription payment or invalid payload
