@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, ArrowRight } from "lucide-react";
+import { getURL } from "../lib/utils";
 
 function LoginForm() {
     const [email, setEmail] = useState("");
@@ -31,7 +32,7 @@ function LoginForm() {
                     email,
                     password,
                     options: {
-                        emailRedirectTo: `${window.location.origin}/`,
+                        emailRedirectTo: `${getURL()}`,
                         data: {
                             referral_code: referralCode
                         }
