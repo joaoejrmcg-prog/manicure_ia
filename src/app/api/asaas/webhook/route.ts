@@ -23,12 +23,27 @@ export async function POST(req: NextRequest) {
         }
 
         const subscriptionId = payment.subscription;
+        console.log(`Processing Webhook for Subscription ID: ${subscriptionId}`);
 
         if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
             // Calculate new period end (30 days from now or from payment date)
             const paymentDate = new Date(payment.paymentDate || payment.dateCreated);
             const newPeriodEnd = new Date(paymentDate);
             newPeriodEnd.setDate(newPeriodEnd.getDate() + 30); // Add 30 days
+
+            // DEBUG: Check if subscription exists
+            const { data: subCheck, error: checkError } = await supabaseAdmin
+                .from('subscriptions')
+                .select('id, status, asaas_subscription_id')
+                .eq('asaas_subscription_id', subscriptionId)
+                .single();
+
+            console.log('DB Check Result:', subCheck, 'Error:', checkError);
+
+            if (!subCheck) {
+                console.error(`Subscription not found in DB for Asaas ID: ${subscriptionId}`);
+                return NextResponse.json({ received: true, warning: 'Subscription not found' });
+            }
 
             // Update subscription
             const { error } = await supabaseAdmin
@@ -43,6 +58,7 @@ export async function POST(req: NextRequest) {
                 console.error('Error updating subscription:', error);
                 return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
             }
+            console.log('Subscription updated successfully.');
         } else if (event === 'PAYMENT_OVERDUE') {
             await supabaseAdmin
                 .from('subscriptions')
