@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Zap, CreditCard, FileText, Loader2 } from "lucide-react";
+import { Calendar, Zap, CreditCard, FileText, Loader2, Clock } from "lucide-react";
 import { createBrowserClient } from '@supabase/ssr';
 import SubscriptionBadge from "./SubscriptionBadge";
 import CancelSubscription from "../perfil/CancelSubscription";
@@ -65,6 +65,42 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
         setSelectedInvoiceId(null);
         setSelectedPlan(profile.plan); // Renew current plan
         setShowPaymentModal(true);
+    };
+
+    const handleCancelInvoice = async (invoiceId: string) => {
+        if (!confirm('Tem certeza que deseja cancelar esta cobrança pendente?')) return;
+
+        setIsLoading(true);
+        try {
+            const supabase = createBrowserClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+            );
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) return;
+
+            const response = await fetch('/api/asaas/payment/cancel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ paymentId: invoiceId })
+            });
+
+            if (response.ok) {
+                // Refresh invoices to update UI
+                fetchInvoices();
+            } else {
+                alert('Erro ao cancelar cobrança.');
+            }
+        } catch (error) {
+            console.error('Error canceling invoice:', error);
+            alert('Erro ao cancelar cobrança.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleConfirmPayment = async (billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD') => {
@@ -140,8 +176,8 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-neutral-200">Assinatura</h2>
 
-                {/* Botão de Assinar se for Trial */}
-                {profile.plan === 'trial' && (
+                {/* Botão de Assinar se for Trial E não tiver faturas pendentes */}
+                {profile.plan === 'trial' && invoices.length === 0 && (
                     <button
                         onClick={handleSubscribe}
                         className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-green-900/20"
@@ -150,8 +186,8 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                     </button>
                 )}
 
-                {/* Botão de Pagar Mensalidade se for Ativo (Light ou Pro) */}
-                {(profile.plan === 'light' || profile.plan === 'pro') && (
+                {/* Botão de Pagar Mensalidade se for Ativo (Light ou Pro) E não tiver faturas pendentes */}
+                {(profile.plan === 'light' || profile.plan === 'pro') && invoices.length === 0 && (
                     <button
                         onClick={handleRenew}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20"
@@ -215,12 +251,24 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                                     <span className="text-white font-bold">
                                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(invoice.value)}
                                     </span>
-                                    <button
-                                        onClick={() => handlePayInvoice(invoice.id, profile.plan)}
-                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-                                    >
-                                        Pagar
-                                    </button>
+                                    <div className="flex flex-col items-end gap-2">
+                                        <div className="flex items-center gap-2 bg-yellow-500/10 px-3 py-1.5 rounded-full border border-yellow-500/20">
+                                            <Clock size={14} className="text-yellow-500" />
+                                            <span className="text-yellow-500 text-xs font-medium">Aguardando Pagamento</span>
+                                        </div>
+                                        <button
+                                            onClick={() => handlePayInvoice(invoice.id, profile.plan)}
+                                            className="text-xs text-neutral-500 hover:text-neutral-300 underline decoration-neutral-700 underline-offset-2 transition-colors"
+                                        >
+                                            Perdi o código de pagamento
+                                        </button>
+                                        <button
+                                            onClick={() => handleCancelInvoice(invoice.id)}
+                                            className="text-[10px] text-red-500 hover:text-red-400 transition-colors mt-1"
+                                        >
+                                            Cancelar cobrança
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}

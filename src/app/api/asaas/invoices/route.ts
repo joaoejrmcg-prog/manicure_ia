@@ -40,8 +40,9 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ invoices: [] });
         }
 
-        // 3. Fetch Pending Invoices from Asaas
-        const response = await fetch(`${ASAAS_API_URL}/payments?customer=${profile.asaas_customer_id}&status=PENDING&limit=10`, {
+        // 3. Fetch Pending and Overdue Invoices from Asaas
+        // Asaas allows filtering by multiple statuses
+        const response = await fetch(`${ASAAS_API_URL}/payments?customer=${profile.asaas_customer_id}&status=PENDING,OVERDUE&limit=10`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
