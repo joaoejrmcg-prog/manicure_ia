@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import PlanCard from "../components/PlanCard";
 import { createBrowserClient } from '@supabase/ssr';
+import { plansData } from "../utils/plans";
 
 interface PlanosClientProps {
     currentPlan: string;
@@ -17,32 +18,7 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const router = useRouter();
 
-    const plansData = [
-        {
-            name: 'LIGHT',
-            price: 'R$ 19,90/mês',
-            features: [
-                '10 interações com IA por dia',
-                'Agenda ilimitada',
-                'Gestão financeira completa',
-                'Cadastro de clientes',
-                'Suporte por email',
-            ],
-        },
-        {
-            name: 'PRO',
-            price: 'R$ 39,90/mês',
-            features: [
-                '✨ IA Ilimitada',
-                'Agenda ilimitada',
-                'Gestão financeira completa',
-                'Cadastro de clientes',
-                'Suporte prioritário',
-                'Relatórios avançados',
-            ],
-            isMostPopular: true,
-        },
-    ];
+
 
     const handleInitiateCheckout = (planName: string) => {
         setSelectedPlan(planName);
@@ -50,8 +26,6 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
     };
 
     const handleConfirmPayment = async (billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD') => {
-        if (!selectedPlan) return;
-
         setIsLoading(true);
         setShowPaymentModal(false);
 
@@ -68,25 +42,33 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                 return;
             }
 
-            const response = await fetch('/api/asaas/checkout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`
-                },
-                body: JSON.stringify({
-                    plan: selectedPlan.toLowerCase(),
-                    billingType: billingType
-                })
-            });
+            let response;
+
+            if (selectedPlan) {
+                // Create new subscription
+                response = await fetch('/api/asaas/checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({
+                        plan: selectedPlan.toLowerCase(),
+                        billingType: billingType
+                    })
+                });
+            } else {
+                return;
+            }
 
             const data = await response.json();
 
             if (response.ok && data.success && data.paymentUrl) {
-                window.location.href = data.paymentUrl;
+                // Redirect to success page with payment URL
+                router.push(`/planos/sucesso?paymentUrl=${encodeURIComponent(data.paymentUrl)}`);
             } else {
-                console.error('Checkout error:', data);
-                alert('Erro ao criar pagamento: ' + (data.error || 'Erro desconhecido'));
+                console.error('Payment error:', data);
+                alert('Erro ao processar pagamento: ' + (data.error || JSON.stringify(data.details) || 'Erro desconhecido'));
             }
 
         } catch (error) {
@@ -107,9 +89,16 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                         <ArrowLeft size={24} />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-bold text-neutral-100">Escolha seu Plano</h1>
-                        <p className="text-sm text-neutral-400 mt-1">Selecione o plano ideal para o seu negócio</p>
+                        <h1 className="text-2xl font-bold text-neutral-100">Minha Assinatura</h1>
+                        <p className="text-sm text-neutral-400 mt-1">Gerencie seu plano e faturas</p>
                     </div>
+                </div>
+
+
+
+                <div className="mb-6">
+                    <h2 className="text-xl font-bold text-neutral-100">Mudar de Plano</h2>
+                    <p className="text-sm text-neutral-400 mt-1">Escolha um novo plano para fazer upgrade</p>
                 </div>
 
                 {/* Loading Overlay */}

@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Calendar, Zap, LogOut, CreditCard, Gift } from 'lucide-react';
 import { getUserProfile, getSubscriptionDetails } from '../actions/profile';
 import { getPlanDisplayName } from '../utils/plans';
-import SubscriptionBadge from '../components/SubscriptionBadge';
-import CancelSubscription from './CancelSubscription';
+import SubscriptionManager from '../components/SubscriptionManager';
 
 export default async function PerfilPage() {
     const cookieStore = await cookies();
@@ -75,51 +74,7 @@ export default async function PerfilPage() {
                 </div>
 
                 {/* Card Principal - Assinatura */}
-                <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 mb-4">
-                    <h2 className="text-lg font-semibold text-neutral-200 mb-4">Assinatura</h2>
-
-                    <SubscriptionBadge plan={profile.plan} status={profile.status} />
-
-                    <div className="mt-6 space-y-4">
-                        {/* Vencimento */}
-                        <div className="flex items-center justify-between p-4 bg-neutral-800 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <Calendar className="text-blue-500" size={20} />
-                                <div>
-                                    <p className="text-sm text-neutral-400">Vencimento</p>
-                                    <p className="font-semibold text-neutral-200">
-                                        {subscription.isLifetime
-                                            ? '♾️ Vitalício'
-                                            : new Date(subscription.currentPeriodEnd!).toLocaleDateString('pt-BR')}
-                                    </p>
-                                </div>
-                            </div>
-                            {!subscription.isLifetime && subscription.daysRemaining !== null && (
-                                <div className="text-right">
-                                    <p className="text-2xl font-bold text-blue-500">{subscription.daysRemaining}</p>
-                                    <p className="text-xs text-neutral-400">dias restantes</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Limite IA */}
-                        <div className="flex items-center gap-3 p-4 bg-neutral-800 rounded-xl">
-                            <Zap className="text-yellow-500" size={20} />
-                            <div>
-                                <p className="text-sm text-neutral-400">Uso da IA</p>
-                                <p className="font-semibold text-neutral-200">{subscription.aiLimit}</p>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    {/* Cancelamento (apenas se não for trial/vitalício e estiver ativo) */}
-                    {!subscription.isLifetime && profile.plan !== 'trial' && subscription.isActive && (
-                        <div className="mt-4 pt-4 border-t border-neutral-800 flex justify-center">
-                            <CancelSubscription currentPeriodEnd={subscription.currentPeriodEnd} />
-                        </div>
-                    )}
-                </div>
+                <SubscriptionManager profile={profile} subscription={subscription} />
 
                 {/* Grid de Ações */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
