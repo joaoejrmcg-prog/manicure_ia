@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import PlanCard from "../components/PlanCard";
+import { createBrowserClient } from '@supabase/ssr';
 
 interface PlanosClientProps {
     currentPlan: string;
 }
 
 export default function PlanosClient({ currentPlan }: PlanosClientProps) {
-    const [showMessage, setShowMessage] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const router = useRouter();
 
     const plansData = [
         {
@@ -39,9 +42,45 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
         },
     ];
 
-    const handleSelectPlan = (planName: string) => {
-        setShowMessage(true);
-        setTimeout(() => setShowMessage(false), 3000);
+    const handleSelectPlan = async (planName: string) => {
+        setIsLoading(true);
+        try {
+            const supabase = createBrowserClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+            );
+
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch('/api/asaas/checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ plan: planName.toLowerCase() })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success && data.paymentUrl) {
+                window.location.href = data.paymentUrl;
+            } else {
+                console.error('Checkout error:', data);
+                alert('Erro ao criar pagamento: ' + (data.error || 'Erro desconhecido'));
+            }
+
+        } catch (error) {
+            console.error('Request error:', error);
+            alert('Erro ao processar solicitação. Tente novamente.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -58,15 +97,12 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                     </div>
                 </div>
 
-                {/* Mensagem de aviso */}
-                {showMessage && (
-                    <div className="mb-6 p-4 bg-blue-500/10 border-l-4 border-blue-500 rounded-lg animate-in fade-in slide-in-from-top-4">
-                        <div className="flex items-center gap-3">
-                            <Sparkles className="text-blue-400" size={20} />
-                            <div>
-                                <p className="font-semibold text-blue-300">Em breve - Pagamento via boleto</p>
-                                <p className="text-sm text-blue-400/80">Estamos finalizando a integração de pagamentos. Aguarde!</p>
-                            </div>
+                {/* Loading Overlay */}
+                {isLoading && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+                        <div className="bg-neutral-900 p-6 rounded-xl border border-neutral-800 flex flex-col items-center gap-4">
+                            <Loader2 className="animate-spin text-blue-500" size={32} />
+                            <p className="text-neutral-200">Gerando link de pagamento...</p>
                         </div>
                     </div>
                 )}

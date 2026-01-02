@@ -99,7 +99,7 @@ export default async function IndiquePage() {
                             <div className="grid grid-cols-2 gap-3">
                                 <CopyButton text={referralLink} />
                                 <a
-                                    href={`https://wa.me/?text=${encodeURIComponent(`Olá! 👋\n\nEstou usando essa IA incrível para gerenciar meu negócio. 🚀\n\nSe cadastre usando meu link e ganhe benefícios:\n${referralLink}`)}`}
+                                    href={`https://wa.me/?text=${encodeURIComponent(`Olá! 👋\n\nEstou usando essa IA incrível para gerenciar meu negócio. 🚀\n\nNão precisa cadastrar nenhum cartão.\n\nSe cadastre usando meu link e ganhe benefícios:\n${referralLink}`)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-green-700 transition-all duration-200 active:scale-95"

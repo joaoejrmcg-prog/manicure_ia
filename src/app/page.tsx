@@ -4,6 +4,7 @@ import CommandCenter from "./components/CommandCenter";
 import ActionFeed from "./components/ActionFeed";
 import { Sparkles } from "lucide-react";
 import { DashboardProvider } from "./context/DashboardContext";
+import SubscriptionStatus from "./components/SubscriptionStatus";
 
 function HomeContent() {
   return (
@@ -21,6 +22,8 @@ function HomeContent() {
               </span>
             </h1>
           </div>
+
+          <SubscriptionStatus />
 
 
 
