@@ -45,6 +45,12 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
             if (response.ok) {
                 const data = await response.json();
                 setInvoices(data.invoices || []);
+
+                // Check for status sync
+                if (data.subscriptionStatus && data.subscriptionStatus !== subscription.status) {
+                    console.log('Subscription status changed, refreshing...', data.subscriptionStatus);
+                    router.refresh();
+                }
             }
         } catch (error) {
             console.error('Error fetching invoices:', error);

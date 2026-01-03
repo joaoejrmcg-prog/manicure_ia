@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getAsaasSubscription } from '@/lib/asaas';
 
 const ASAAS_API_URL = process.env.ASAAS_API_URL;
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
@@ -28,20 +29,52 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 2. Get User Profile to find Asaas Customer ID
+        // 2. Get User Profile and Subscription
         const { data: profile, error: profileError } = await supabaseAdmin
             .from('profiles')
             .select('asaas_customer_id')
             .eq('user_id', user.id)
             .single();
 
+        const { data: subscription } = await supabaseAdmin
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
         if (profileError || !profile?.asaas_customer_id) {
-            // User has no Asaas customer ID, so no invoices
             return NextResponse.json({ invoices: [] });
         }
 
-        // 3. Fetch Pending and Overdue Invoices from Asaas
-        // Asaas allows filtering by multiple statuses
+        // 3. SYNC LOGIC: Check Asaas Subscription Status
+        if (subscription?.asaas_subscription_id) {
+            try {
+                const asaasSub = await getAsaasSubscription(subscription.asaas_subscription_id);
+
+                if (asaasSub && asaasSub.status === 'ACTIVE' && subscription.status !== 'active') {
+                    console.log(`[SYNC] Updating subscription ${subscription.id} to ACTIVE based on Asaas status.`);
+
+                    // Calculate period end (30 days from nextDueDate or today)
+                    const nextDue = new Date(asaasSub.nextDueDate);
+                    // If active, usually nextDueDate is in the future. 
+                    // But if it just activated, nextDueDate might be next month.
+                    // Let's rely on nextDueDate as the end of the current paid period? 
+                    // Actually, nextDueDate is when the NEXT payment is due. So the current period ends there.
+
+                    await supabaseAdmin
+                        .from('subscriptions')
+                        .update({
+                            status: 'active',
+                            current_period_end: nextDue.toISOString()
+                        })
+                        .eq('id', subscription.id);
+                }
+            } catch (syncError) {
+                console.error('[SYNC] Error syncing subscription:', syncError);
+            }
+        }
+
+        // 4. Fetch Pending and Overdue Invoices from Asaas
         const response = await fetch(`${ASAAS_API_URL}/payments?customer=${profile.asaas_customer_id}&status=PENDING,OVERDUE&limit=10`, {
             method: 'GET',
             headers: {
@@ -68,7 +101,17 @@ export async function GET(req: NextRequest) {
             status: invoice.status
         }));
 
-        return NextResponse.json({ invoices });
+        // Fetch the potentially updated subscription to return its status
+        const { data: updatedSubscription } = await supabaseAdmin
+            .from('subscriptions')
+            .select('status')
+            .eq('user_id', user.id)
+            .single();
+
+        return NextResponse.json({
+            invoices,
+            subscriptionStatus: updatedSubscription?.status
+        });
 
     } catch (error: any) {
         console.error('Invoices API Error:', error);
