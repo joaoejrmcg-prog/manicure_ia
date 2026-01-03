@@ -115,9 +115,7 @@ export async function POST(req: NextRequest) {
 
         if (existingSub) {
             // If exists, update it. 
-            // NOTE: In a real scenario, you might want to cancel the old Asaas subscription if the ID is different.
-            // For now, we just update the record with the new subscription ID.
-            await supabaseAdmin
+            const { error: updateError } = await supabaseAdmin
                 .from('subscriptions')
                 .update({
                     asaas_subscription_id: subscription.id,
@@ -126,8 +124,13 @@ export async function POST(req: NextRequest) {
                     current_period_end: null // Reset period
                 })
                 .eq('user_id', user.id);
+
+            if (updateError) {
+                console.error('Failed to update subscription in DB:', updateError);
+                throw new Error('Failed to update subscription record');
+            }
         } else {
-            await supabaseAdmin
+            const { error: insertError } = await supabaseAdmin
                 .from('subscriptions')
                 .insert({
                     user_id: user.id,
@@ -135,6 +138,11 @@ export async function POST(req: NextRequest) {
                     plan: plan,
                     status: 'pending',
                 });
+
+            if (insertError) {
+                console.error('Failed to create subscription in DB:', insertError);
+                throw new Error('Failed to create subscription record');
+            }
         }
 
         return NextResponse.json({
