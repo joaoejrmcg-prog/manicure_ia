@@ -161,7 +161,7 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
             const data = await response.json();
 
             if (response.ok && data.success && data.paymentUrl) {
-                router.push(`/planos/sucesso?paymentUrl=${encodeURIComponent(data.paymentUrl)}`);
+                window.location.href = data.paymentUrl;
             } else {
                 console.error('Payment error:', data);
                 alert('Erro ao processar pagamento: ' + (data.error || JSON.stringify(data.details) || 'Erro desconhecido'));

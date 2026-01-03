@@ -65,7 +65,7 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
 
             if (response.ok && data.success && data.paymentUrl) {
                 // Redirect to success page with payment URL
-                router.push(`/planos/sucesso?paymentUrl=${encodeURIComponent(data.paymentUrl)}`);
+                window.location.href = data.paymentUrl;
             } else {
                 console.error('Payment error:', data);
                 alert('Erro ao processar pagamento: ' + (data.error || JSON.stringify(data.details) || 'Erro desconhecido'));
