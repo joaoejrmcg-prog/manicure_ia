@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
                     asaas_subscription_id: subscription.id,
                     plan: plan,
                     status: 'pending', // Reset status to pending until payment
-                    current_period_end: null // Reset period
+                    current_period_end: new Date().toISOString() // Reset period to now
                 })
                 .eq('user_id', user.id);
 
