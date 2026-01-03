@@ -324,5 +324,50 @@ export const DataManager = {
 
         if (error) throw error;
         return true;
+    },
+
+    findPendingTransaction: async (description: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        // Search for pending transactions that match the description
+        const { data, error } = await supabase
+            .from('financial_records')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .ilike('description', `%${description}%`)
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data as FinancialRecord | null;
+    },
+
+    findPendingTransactionsByClient: async (clientName: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        // 1. Find Client ID
+        const { data: client } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('user_id', user.id)
+            .ilike('name', clientName) // Exact match (case insensitive) preferred, or we could do partial
+            .single();
+
+        if (!client) return [];
+
+        // 2. Find Pending Transactions
+        const { data, error } = await supabase
+            .from('financial_records')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('client_id', client.id)
+            .eq('status', 'pending')
+            .order('due_date', { ascending: true });
+
+        if (error) throw error;
+        return data as FinancialRecord[];
     }
 };

@@ -11,7 +11,7 @@ export default function FinancialPage() {
     const [clients, setClients] = useState<Client[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
-    const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+    const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
     const [paymentFilter, setPaymentFilter] = useState<'all' | 'money' | 'pix' | 'card' | 'other'>('all');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -24,12 +24,16 @@ export default function FinancialPage() {
         description: string;
         payment_method: string;
         client_id: string;
+        status: 'paid' | 'pending';
+        due_date: string;
     }>({
         type: 'income',
         amount: "",
         description: "",
         payment_method: "",
-        client_id: ""
+        client_id: "",
+        status: 'paid',
+        due_date: ""
     });
 
     const loadData = async () => {
@@ -88,7 +92,9 @@ export default function FinancialPage() {
                 amount: record.amount.toString(),
                 description: record.description,
                 payment_method: record.payment_method || "",
-                client_id: record.client_id || ""
+                client_id: record.client_id || "",
+                status: record.status || 'paid',
+                due_date: record.due_date ? new Date(record.due_date).toISOString().split('T')[0] : ""
             });
         } else {
             setEditingRecord(null);
@@ -97,7 +103,9 @@ export default function FinancialPage() {
                 amount: "",
                 description: "",
                 payment_method: "",
-                client_id: ""
+                client_id: "",
+                status: 'paid',
+                due_date: ""
             });
         }
         setIsFormOpen(true);
@@ -116,7 +124,9 @@ export default function FinancialPage() {
                 amount: parseFloat(formData.amount.replace(',', '.')), // Handle comma decimal
                 description: formData.description,
                 payment_method: formData.payment_method || undefined,
-                client_id: formData.client_id || undefined
+                client_id: formData.client_id || undefined,
+                status: formData.status,
+                due_date: formData.due_date || undefined
             };
 
             if (editingRecord) {
@@ -144,10 +154,26 @@ export default function FinancialPage() {
         }
     };
 
+    const handleMarkAsPaid = async (record: FinancialRecord) => {
+        try {
+            await DataManager.updateTransaction(record.id, { status: 'paid' });
+            await loadData();
+        } catch (error) {
+            console.error("Erro ao marcar como pago:", error);
+            alert("Erro ao atualizar status.");
+        }
+    };
+
     const filteredRecords = records.filter(r => {
         const matchesSearch = r.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
             r.client?.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = filterType === 'all' || r.type === filterType;
+
+        let matchesType = true;
+        if (filterType === 'pending') {
+            matchesType = r.status === 'pending';
+        } else if (filterType !== 'all') {
+            matchesType = r.type === filterType;
+        }
 
         // Payment filter only applies to income (Receitas) as per requirement
         // "Dentro de cada mes preciso que filtre (dentro de receitas)..."
@@ -160,9 +186,18 @@ export default function FinancialPage() {
         return matchesSearch && matchesType && matchesPayment;
     });
 
-    const totalBalance = records.reduce((acc, r) => {
+    const realizedBalance = records.reduce((acc, r) => {
+        if (r.status === 'pending') return acc;
         return r.type === 'income' ? acc + r.amount : acc - r.amount;
     }, 0);
+
+    const pendingIncome = records
+        .filter(r => r.type === 'income' && r.status === 'pending')
+        .reduce((acc, r) => acc + r.amount, 0);
+
+    const pendingExpense = records
+        .filter(r => r.type === 'expense' && r.status === 'pending')
+        .reduce((acc, r) => acc + r.amount, 0);
 
     const filteredTotal = filteredRecords.reduce((acc, r) => {
         // If we are filtering by payment method (which implies income), we just sum positive amounts
@@ -251,16 +286,43 @@ _Gerado por Meu Negócio IA_`;
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Realized Balance (Caixa) */}
                 <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
                             <DollarSign className="w-4 h-4" />
                         </div>
-                        <span className="text-sm text-neutral-400">Saldo de {capitalizedMonth}</span>
+                        <span className="text-sm text-neutral-400">Caixa de {capitalizedMonth}</span>
                     </div>
-                    <p className={cn("text-2xl font-bold", totalBalance >= 0 ? "text-green-400" : "text-red-400")}>
-                        R$ {totalBalance.toFixed(2)}
+                    <p className={cn("text-2xl font-bold", realizedBalance >= 0 ? "text-green-400" : "text-red-400")}>
+                        R$ {realizedBalance.toFixed(2)}
+                    </p>
+                </div>
+
+                {/* Pending Income (A Receber) */}
+                <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
+                            <TrendingUp className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm text-neutral-400">A Receber</span>
+                    </div>
+                    <p className="text-2xl font-bold text-yellow-400">
+                        R$ {pendingIncome.toFixed(2)}
+                    </p>
+                </div>
+
+                {/* Pending Expense (A Pagar) */}
+                <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-400">
+                            <TrendingDown className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm text-neutral-400">A Pagar</span>
+                    </div>
+                    <p className="text-2xl font-bold text-red-400">
+                        R$ {pendingExpense.toFixed(2)}
                     </p>
                 </div>
 
@@ -292,7 +354,7 @@ _Gerado por Meu Negócio IA_`;
                     />
                 </div>
                 <div className="flex bg-neutral-900 p-1 rounded-xl border border-neutral-800">
-                    {(['all', 'income', 'expense'] as const).map((type) => (
+                    {(['all', 'income', 'expense', 'pending'] as const).map((type) => (
                         <button
                             key={type}
                             onClick={() => setFilterType(type)}
@@ -303,7 +365,7 @@ _Gerado por Meu Negócio IA_`;
                                     : "text-neutral-400 hover:text-neutral-200"
                             )}
                         >
-                            {type === 'all' ? 'Todos' : type === 'income' ? 'Receitas' : 'Despesas'}
+                            {type === 'all' ? 'Todos' : type === 'income' ? 'Receitas' : type === 'expense' ? 'Despesas' : 'Pendentes'}
                         </button>
                     ))}
                 </div>
@@ -366,6 +428,13 @@ _Gerado por Meu Negócio IA_`;
                                             </span>
                                         )}
                                     </div>
+                                    {record.status === 'pending' && (
+                                        <div className="mt-1">
+                                            <span className="text-xs font-medium bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded-full">
+                                                Pendente {record.due_date && `- Vence ${new Date(record.due_date).toLocaleDateString()}`}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -378,6 +447,11 @@ _Gerado por Meu Negócio IA_`;
                                 </span>
 
                                 <div className="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                    {record.status === 'pending' && (
+                                        <button onClick={() => handleMarkAsPaid(record)} className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-green-400" title="Marcar como Pago">
+                                            <DollarSign className="w-4 h-4" />
+                                        </button>
+                                    )}
                                     <button onClick={() => handleOpenForm(record)} className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-blue-400">
                                         <Edit2 className="w-4 h-4" />
                                     </button>
@@ -439,6 +513,29 @@ _Gerado por Meu Negócio IA_`;
                                     <TrendingDown className="w-4 h-4" />
                                     Despesa
                                 </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-neutral-500 uppercase">Status</label>
+                                    <select
+                                        value={formData.status}
+                                        onChange={e => setFormData({ ...formData, status: e.target.value as 'paid' | 'pending' })}
+                                        className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-2.5 text-neutral-200 focus:ring-2 focus:ring-blue-500/50 outline-none appearance-none"
+                                    >
+                                        <option value="paid">Pago / Recebido</option>
+                                        <option value="pending">Pendente</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-neutral-500 uppercase">Vencimento</label>
+                                    <input
+                                        type="date"
+                                        value={formData.due_date}
+                                        onChange={e => setFormData({ ...formData, due_date: e.target.value })}
+                                        className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-2.5 text-neutral-200 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                    />
+                                </div>
                             </div>
 
                             <div className="space-y-2">

@@ -27,9 +27,11 @@ export interface FinancialRecord {
     payment_method?: string;
     created_at: string;
     client?: Client;
+    status?: 'paid' | 'pending';
+    due_date?: string;
 }
 
-export type IntentType = 'ADD_CLIENT' | 'DELETE_CLIENT' | 'UPDATE_CLIENT' | 'LIST_CLIENTS' | 'SCHEDULE_SERVICE' | 'CANCEL_APPOINTMENT' | 'REGISTER_SALE' | 'REGISTER_EXPENSE' | 'DELETE_LAST_ACTION' | 'RISKY_ACTION' | 'CONFIRMATION_REQUIRED' | 'MULTI_ACTION' | 'REPORT' | 'UNKNOWN' | 'CHECK_CLIENT_SCHEDULE' | 'UNSUPPORTED_FEATURE' | 'NAVIGATE';
+export type IntentType = 'ADD_CLIENT' | 'DELETE_CLIENT' | 'UPDATE_CLIENT' | 'LIST_CLIENTS' | 'SCHEDULE_SERVICE' | 'CANCEL_APPOINTMENT' | 'REGISTER_SALE' | 'REGISTER_EXPENSE' | 'DELETE_LAST_ACTION' | 'RISKY_ACTION' | 'CONFIRMATION_REQUIRED' | 'MULTI_ACTION' | 'REPORT' | 'UNKNOWN' | 'CHECK_CLIENT_SCHEDULE' | 'UNSUPPORTED_FEATURE' | 'NAVIGATE' | 'MARK_AS_PAID';
 
 export interface AIResponse {
     intent: IntentType;

@@ -38,7 +38,9 @@ export async function checkAndIncrementUsage() {
     }
 
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    // Adjust for BRT (UTC-3)
+    const brtDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const today = brtDate.toISOString().split('T')[0];
 
     // 0. Get Subscription
     const { data: subscription } = await supabase
@@ -132,7 +134,9 @@ export async function getDailyUsage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
 
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const brtDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const today = brtDate.toISOString().split('T')[0];
 
     const { data: usage } = await supabase
         .from('daily_usage')
@@ -142,4 +146,44 @@ export async function getDailyUsage() {
         .single();
 
     return usage?.count || 0;
+}
+
+export async function refundUsageAction() {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            cookies: {
+                get(name: string) {
+                    return cookieStore.get(name)?.value;
+                },
+                set(name: string, value: string, options: CookieOptions) { },
+                remove(name: string, options: CookieOptions) { },
+            },
+        }
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const now = new Date();
+    const brtDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const today = brtDate.toISOString().split('T')[0];
+
+    // Get current usage
+    const { data: usage } = await supabase
+        .from('daily_usage')
+        .select('count')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .single();
+
+    if (usage && usage.count > 0) {
+        await supabase
+            .from('daily_usage')
+            .update({ count: usage.count - 1 })
+            .eq('user_id', user.id)
+            .eq('date', today);
+    }
 }

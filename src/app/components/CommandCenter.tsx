@@ -8,7 +8,7 @@ import { DataManager } from "../lib/data-manager";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
-import { checkAndIncrementUsage, getDailyUsage } from "../actions/usage";
+import { checkAndIncrementUsage, getDailyUsage, refundUsageAction } from "../actions/usage";
 import { VoiceOrb } from "./VoiceOrb";
 
 type Message = {
@@ -110,13 +110,23 @@ export default function CommandCenter() {
         await supabase.auth.signOut();
     };
 
-    const addMessage = (role: 'user' | 'assistant', content: string, type: 'text' | 'error' | 'success' = 'text') => {
+    const addMessage = (role: 'user' | 'assistant', content: string, type: 'text' | 'error' | 'success' = 'text', skipRefund = false) => {
         setMessages(prev => [...prev, {
             id: Math.random().toString(36).substring(7),
             role,
             content,
             type
         }]);
+
+        // Refund usage if it's an error or just informational (text)
+        // Only 'success' messages should consume quota
+        // AND skipRefund must be false
+        if (role === 'assistant' && type !== 'success' && !skipRefund) {
+            refundUsageAction().then(() => {
+                // Update local count to reflect refund
+                setUsageCount(prev => Math.max(0, prev - 1));
+            });
+        }
     };
 
     const checkLimit = async () => {
@@ -124,9 +134,9 @@ export default function CommandCenter() {
         setUsageCount(usage.count);
 
         if (!usage.allowed) {
-            addMessage('assistant', `🛑 Você atingiu seu limite diário de 10 interações.`, 'error');
-            addMessage('assistant', `Você pode continuar realizando esta ação manualmente através do menu do aplicativo.`, 'text');
-            addMessage('assistant', `Que tal fazer um upgrade para o plano PRO? Assim você tem acesso ilimitado e seu negócio não para! 🚀`, 'text');
+            addMessage('assistant', `🛑 Você atingiu seu limite diário de 10 interações.`, 'error', true);
+            addMessage('assistant', `Você pode continuar realizando esta ação manualmente através do menu do aplicativo.`, 'text', true);
+            addMessage('assistant', `Que tal fazer um upgrade para o plano PRO? Assim você tem acesso ilimitado e seu negócio não para! 🚀`, 'text', true);
             setConversationState({ type: 'IDLE' });
             return false;
         }
@@ -269,7 +279,17 @@ export default function CommandCenter() {
                             const client = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
 
                             if (client) {
-                                if (!response.data.paymentMethod) {
+                                if (response.data.status === 'pending') {
+                                    await DataManager.addTransaction({
+                                        type: 'income',
+                                        amount: response.data.amount,
+                                        description: response.data.service,
+                                        client_id: client.id,
+                                        status: 'pending',
+                                        due_date: response.data.dueDate
+                                    });
+                                    addMessage('assistant', "Venda pendente registrada com sucesso!", 'success');
+                                } else if (!response.data.paymentMethod) {
                                     setConversationState({
                                         type: 'ASK_PAYMENT_METHOD',
                                         data: {
@@ -279,16 +299,17 @@ export default function CommandCenter() {
                                     });
                                     addMessage('assistant', "Qual foi a forma de pagamento? (Pix, Dinheiro, Cartão...)");
                                     return;
+                                } else {
+                                    await DataManager.addTransaction({
+                                        type: 'income',
+                                        amount: response.data.amount,
+                                        description: response.data.service,
+                                        payment_method: response.data.paymentMethod,
+                                        client_id: client.id,
+                                        status: 'paid'
+                                    });
+                                    addMessage('assistant', "Venda registrada com sucesso!", 'success');
                                 }
-
-                                await DataManager.addTransaction({
-                                    type: 'income',
-                                    amount: response.data.amount,
-                                    description: response.data.service,
-                                    payment_method: response.data.paymentMethod,
-                                    client_id: client.id
-                                });
-                                addMessage('assistant', "Venda registrada com sucesso!", 'success');
                             } else {
                                 // Client not found -> Trigger Add Client Flow
                                 addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}". Deseja cadastrá-la agora?`);
@@ -347,6 +368,18 @@ export default function CommandCenter() {
                                 await DataManager.cancelAppointment(appointmentId);
                                 addMessage('assistant', "Agendamento cancelado com sucesso.", 'success');
                             }
+                        } else if (originalIntent.data.originalIntent === 'MARK_AS_PAID_ID') {
+                            // Transition to ASK_PAYMENT_METHOD instead of updating immediately
+                            const data = originalIntent.data.data;
+                            setConversationState({
+                                type: 'ASK_PAYMENT_METHOD',
+                                data: {
+                                    transactionData: { ...data, isUpdate: true },
+                                    clientName: data.clientName || "Cliente"
+                                }
+                            });
+                            addMessage('assistant', "Certo. E qual foi a forma de pagamento?");
+                            return;
                         } else if (originalIntent.data.originalIntent === 'MULTI_ACTION') {
                             const actions = originalIntent.data.actions;
                             for (const action of actions) {
@@ -411,11 +444,34 @@ export default function CommandCenter() {
                         const originalData = conversationState.data.originalIntent.data;
 
                         if (conversationState.data.originalIntent.intent === 'REGISTER_SALE') {
-                            if (!originalData.paymentMethod) {
+                            // Sanitize amount
+                            const amount = Number(String(originalData.amount).replace(',', '.'));
+
+                            // Check if it's a pending sale
+                            let isPending = originalData.status === 'pending';
+                            let dueDate = originalData.dueDate;
+
+                            // Fallback: If AI forgot status='pending' but sent a due date, infer pending
+                            if (!isPending && dueDate && dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                isPending = true;
+                            }
+
+                            if (isPending) {
+                                await DataManager.addTransaction({
+                                    type: 'income',
+                                    amount: amount,
+                                    description: originalData.service || 'Venda',
+                                    client_id: newClient.id,
+                                    status: 'pending',
+                                    due_date: dueDate
+                                });
+                                addMessage('assistant', `Venda pendente registrada: R$${originalData.amount}.`, 'success');
+                                await playAudioWithCache("Pronto, registrado.", undefined);
+                            } else if (!originalData.paymentMethod) {
                                 setConversationState({
                                     type: 'ASK_PAYMENT_METHOD',
                                     data: {
-                                        transactionData: originalData,
+                                        transactionData: { ...originalData, amount }, // Pass sanitized amount
                                         clientName: conversationState.data.name
                                     }
                                 });
@@ -427,7 +483,8 @@ export default function CommandCenter() {
                                     amount: Number(originalData.amount),
                                     description: originalData.service || 'Venda',
                                     payment_method: originalData.paymentMethod,
-                                    client_id: newClient.id
+                                    client_id: newClient.id,
+                                    status: 'paid'
                                 });
                                 addMessage('assistant', `Venda registrada: R$${originalData.amount} (${originalData.service || 'Venda'})`, 'success');
                                 await playAudioWithCache("Pronto, registrado.", undefined);
@@ -501,42 +558,76 @@ export default function CommandCenter() {
             // Update transaction data with the provided payment method
             const updatedTransactionData = { ...transactionData, paymentMethod };
 
+            // Validate amount again
+            const amount = Number(String(updatedTransactionData.amount).replace(',', '.'));
+            if (isNaN(amount) || amount <= 0) {
+                // Should not happen if we validated before entering this state, but as a safeguard:
+                addMessage('assistant', "Valor inválido. Por favor, tente registrar novamente.");
+                setConversationState({ type: 'IDLE' });
+                return;
+            }
+
+            // checkLimit is already called at start of processAIResponse, but here we are in a continuation state.
+            // We need to charge for this continuation step as well?
+            // Actually, the user already paid for the first step (which refunded).
+            // So we SHOULD charge here.
             if (!await checkLimit()) return;
 
             try {
-                const clients = await DataManager.getClients();
-                const client = clients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
-
-                if (client) {
+                if (updatedTransactionData.type === 'expense') {
                     await DataManager.addTransaction({
-                        type: 'income',
-                        amount: Number(String(updatedTransactionData.amount).replace(',', '.')),
-                        description: updatedTransactionData.service || 'Venda',
+                        type: 'expense',
+                        amount: amount,
+                        description: updatedTransactionData.description || 'Despesa',
                         payment_method: updatedTransactionData.paymentMethod,
-                        client_id: client.id
+                        status: 'paid',
+                        due_date: updatedTransactionData.dueDate
                     });
-                    addMessage('assistant', `Venda registrada: R$${updatedTransactionData.amount} no ${updatedTransactionData.paymentMethod}.`, 'success');
+                    addMessage('assistant', `Despesa registrada: ${updatedTransactionData.description} R$${updatedTransactionData.amount} no ${updatedTransactionData.paymentMethod}.`, 'success');
                 } else {
-                    // Client not found -> Trigger Add Client Flow
-                    const msg = `Não encontrei o cliente "${clientName}". Deseja cadastrá-lo agora?`;
-                    addMessage('assistant', msg);
-                    await playAudioWithCache(msg, undefined);
+                    // Income Logic (Existing)
+                    const clients = await DataManager.getClients();
+                    const client = clients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
 
-                    setConversationState({
-                        type: 'CONFIRM_ADD_CLIENT',
-                        data: {
-                            name: clientName,
-                            originalIntent: {
-                                intent: 'REGISTER_SALE',
-                                data: updatedTransactionData // Pass the data WITH the payment method so it executes immediately after
-                            }
+                    if (client) {
+                        if (updatedTransactionData.isUpdate && updatedTransactionData.id) {
+                            await DataManager.updateTransaction(updatedTransactionData.id, {
+                                status: 'paid',
+                                payment_method: updatedTransactionData.paymentMethod
+                            });
+                            addMessage('assistant', `Recebimento de ${clientName} (${updatedTransactionData.description}) registrado no ${updatedTransactionData.paymentMethod}!`, 'success');
+                        } else {
+                            await DataManager.addTransaction({
+                                type: 'income',
+                                amount: amount,
+                                description: updatedTransactionData.service || 'Venda',
+                                payment_method: updatedTransactionData.paymentMethod,
+                                client_id: client.id
+                            });
+                            addMessage('assistant', `Venda registrada: R$${updatedTransactionData.amount} no ${updatedTransactionData.paymentMethod}.`, 'success');
                         }
-                    });
-                    return;
+                    } else {
+                        // Client not found -> Trigger Add Client Flow
+                        const msg = `Não encontrei o cliente "${clientName}". Deseja cadastrá-lo agora?`;
+                        addMessage('assistant', msg);
+                        await playAudioWithCache(msg, undefined);
+
+                        setConversationState({
+                            type: 'CONFIRM_ADD_CLIENT',
+                            data: {
+                                name: clientName,
+                                originalIntent: {
+                                    intent: 'REGISTER_SALE',
+                                    data: updatedTransactionData // Pass the data WITH the payment method so it executes immediately after
+                                }
+                            }
+                        });
+                        return;
+                    }
                 }
             } catch (error) {
                 console.error(error);
-                addMessage('assistant', "Erro ao registrar venda.", 'error');
+                addMessage('assistant', "Erro ao registrar transação.", 'error');
             }
             setConversationState({ type: 'IDLE' });
             return;
@@ -591,6 +682,9 @@ export default function CommandCenter() {
 
         // 2. Standard AI Processing (Server Action)
         try {
+            // Check usage limit BEFORE processing
+            if (!await checkLimit()) return;
+
             // Capture inputType at the start of the request to avoid state drift
             const currentInputType = inputType;
 
@@ -699,27 +793,67 @@ export default function CommandCenter() {
 
                         // Client found -> Execute Action
                         if (response.intent === 'REGISTER_SALE') {
-                            if (!response.data.paymentMethod) {
-                                setConversationState({
-                                    type: 'ASK_PAYMENT_METHOD',
-                                    data: {
-                                        transactionData: response.data,
-                                        clientName: client.name
-                                    }
-                                });
-                                addMessage('assistant', "Qual foi a forma de pagamento? (Pix, Dinheiro, Cartão...)");
+                            // Sanitize amount
+                            const amount = Number(String(response.data.amount).replace(',', '.'));
+
+                            // Validate amount
+                            if (isNaN(amount) || amount <= 0) {
+                                // Amount is missing or invalid. 
+                                // The AI likely asked for it in response.message.
+                                // Just show the message and let the user reply (IDLE state).
+                                addMessage('assistant', response.message);
                                 return;
                             }
 
-                            await DataManager.addTransaction({
-                                type: 'income',
-                                amount: response.data.amount,
-                                description: response.data.service,
-                                payment_method: response.data.paymentMethod,
-                                client_id: client.id
-                            });
-                            if (!await checkLimit()) break;
-                            addMessage('assistant', response.message, 'success');
+                            // Check if it's a pending sale
+
+                            // Check if it's a pending sale
+                            // If status is pending OR if there is a valid future due date, treat as pending
+                            let isPending = response.data.status === 'pending';
+                            let dueDate = response.data.dueDate;
+
+                            // Fallback: If AI forgot status='pending' but sent a due date, infer pending
+                            if (!isPending && dueDate && dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                isPending = true;
+                            }
+
+                            if (isPending) {
+                                await DataManager.addTransaction({
+                                    type: 'income',
+                                    amount: amount,
+                                    description: response.data.service,
+                                    client_id: client.id,
+                                    status: 'pending',
+                                    due_date: dueDate
+                                });
+                                addMessage('assistant', response.message, 'success');
+                            } else {
+                                // Standard sale (paid now)
+                                // Safeguard: If paymentMethod is too long, it's likely a hallucination/sentence. Treat as missing.
+                                const isValidPaymentMethod = response.data.paymentMethod && response.data.paymentMethod.length < 30;
+
+                                if (!isValidPaymentMethod) {
+                                    setConversationState({
+                                        type: 'ASK_PAYMENT_METHOD',
+                                        data: {
+                                            transactionData: { ...response.data, amount }, // Pass sanitized amount
+                                            clientName: client.name
+                                        }
+                                    });
+                                    addMessage('assistant', "Qual foi a forma de pagamento? (Pix, Dinheiro, Cartão...)");
+                                    return;
+                                }
+
+                                await DataManager.addTransaction({
+                                    type: 'income',
+                                    amount: amount,
+                                    description: response.data.service,
+                                    payment_method: response.data.paymentMethod,
+                                    client_id: client.id,
+                                    status: 'paid'
+                                });
+                                addMessage('assistant', response.message, 'success');
+                            }
                         } else if (response.intent === 'SCHEDULE_SERVICE') {
                             if (!response.data.service) {
                                 setConversationState({
@@ -743,14 +877,12 @@ export default function CommandCenter() {
                             }
 
                             await DataManager.addAppointment(client.id, date, response.data.service);
-                            if (!await checkLimit()) break;
                             addMessage('assistant', response.message, 'success');
                         }
                     }
                     break;
 
                 case 'ADD_CLIENT':
-                    if (!await checkLimit()) break;
                     if (response.data?.name) {
                         await DataManager.addClient({ name: response.data.name });
                         addMessage('assistant', response.message, 'success');
@@ -758,7 +890,6 @@ export default function CommandCenter() {
                     break;
 
                 case 'DELETE_CLIENT':
-                    if (!await checkLimit()) break;
                     if (response.data?.name) {
                         const removed = await DataManager.removeClient(response.data.name);
                         if (removed) addMessage('assistant', response.message, 'success');
@@ -767,24 +898,102 @@ export default function CommandCenter() {
                     break;
 
                 case 'LIST_CLIENTS':
-                    if (!await checkLimit()) break;
                     const clients = await DataManager.getClients();
                     if (clients.length === 0) addMessage('assistant', "Nenhuma cliente cadastrada.", 'text');
                     else addMessage('assistant', `Clientes: ${clients.map(c => c.name).join(", ")}`, 'text');
                     break;
 
                 case 'REGISTER_EXPENSE':
-                    if (!await checkLimit()) break;
+                    const expenseStatus = response.data.status || 'paid';
+                    const expensePaymentMethod = response.data.paymentMethod;
+
+                    // If paid and no payment method, ask for it
+                    if (expenseStatus === 'paid' && !expensePaymentMethod) {
+                        setConversationState({
+                            type: 'ASK_PAYMENT_METHOD',
+                            data: {
+                                transactionData: { ...response.data, type: 'expense' },
+                                clientName: '' // Not needed for expenses
+                            }
+                        });
+                        addMessage('assistant', "Qual foi a forma de pagamento? (Pix, Dinheiro, Cartão...)");
+                        return;
+                    }
+
                     await DataManager.addTransaction({
                         type: 'expense',
                         amount: response.data.amount,
-                        description: response.data.description
+                        description: response.data.description,
+                        status: expenseStatus,
+                        payment_method: expensePaymentMethod,
+                        due_date: response.data.dueDate
                     });
                     addMessage('assistant', response.message, 'success');
                     break;
 
+                case 'MARK_AS_PAID':
+
+                    if (response.data?.clientName) {
+                        // Scenario: "Recebi da Natalia"
+                        const pendingList = await DataManager.findPendingTransactionsByClient(response.data.clientName);
+
+                        if (pendingList.length === 0) {
+                            // No pending bills -> Ask to register new sale
+                            addMessage('assistant', `Não encontrei contas pendentes para ${response.data.clientName}. Deseja registrar uma nova venda?`);
+                            setConversationState({
+                                type: 'CONFIRM_ACTION',
+                                data: {
+                                    originalIntent: {
+                                        intent: 'REGISTER_SALE',
+                                        data: {
+                                            clientName: response.data.clientName,
+                                            // We don't have amount/service yet, so the AI will ask later or we can prompt now
+                                            // But standard REGISTER_SALE flow handles missing data
+                                        }
+                                    }
+                                }
+                            });
+                        } else if (pendingList.length === 1) {
+                            // One pending bill -> Confirm
+                            const bill = pendingList[0];
+                            const dateStr = bill.due_date ? new Date(bill.due_date).toLocaleDateString('pt-BR') : 'sem data';
+                            addMessage('assistant', `Você está falando da conta "${bill.description}" de R$${bill.amount} que vence dia ${dateStr}?`);
+                            setConversationState({
+                                type: 'CONFIRM_ACTION',
+                                data: {
+                                    originalIntent: {
+                                        intent: 'CONFIRMATION_REQUIRED', // Fake intent to match structure
+                                        data: {
+                                            originalIntent: 'MARK_AS_PAID_ID', // Internal intent
+                                            data: {
+                                                id: bill.id,
+                                                description: bill.description,
+                                                amount: bill.amount,
+                                                clientName: response.data.clientName
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        } else {
+                            // Multiple pending bills -> List them (MVP: Just list and ask to be specific)
+                            const list = pendingList.map(p => `${p.description} (R$${p.amount})`).join(', ');
+                            addMessage('assistant', `Encontrei ${pendingList.length} contas pendentes da ${response.data.clientName}: ${list}. Qual delas você quer baixar?`);
+                            // IDLE state, user replies with description
+                        }
+                    } else if (response.data?.description) {
+                        // Legacy/Generic: "Paguei a luz"
+                        const pending = await DataManager.findPendingTransaction(response.data.description);
+                        if (pending) {
+                            await DataManager.updateTransaction(pending.id, { status: 'paid' });
+                            addMessage('assistant', `Conta "${pending.description}" marcada como paga!`, 'success');
+                        } else {
+                            addMessage('assistant', `Não encontrei nenhuma conta pendente com a descrição "${response.data.description}".`, 'error');
+                        }
+                    }
+                    break;
+
                 case 'DELETE_LAST_ACTION':
-                    if (!await checkLimit()) break;
                     const deleted = await DataManager.deleteLastAction();
                     if (deleted) addMessage('assistant', "Último registro apagado com sucesso.", 'success');
                     else addMessage('assistant', "Não encontrei nada recente para apagar.", 'error');
