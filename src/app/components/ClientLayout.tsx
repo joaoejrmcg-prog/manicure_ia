@@ -39,8 +39,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_OUT' || !session) {
                 setIsAuthenticated(false);
+
+                // Only redirect if not on public page
                 if (!publicRoutes.includes(window.location.pathname)) {
-                    router.push('/login'); // Centralized redirect
+                    router.push('/login');
                 }
             } else if (session) {
                 setIsAuthenticated(true);

@@ -18,8 +18,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const router = useRouter();
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        // ClientLayout handles the redirect via onAuthStateChange
+        const { performLogout } = await import('../lib/auth-utils');
+        await performLogout(router);
     };
 
     const [isAdmin, setIsAdmin] = useState(false);
