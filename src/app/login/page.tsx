@@ -30,36 +30,41 @@ function LoginForm() {
             if (isEnrolled && mode === 'login' && !biometricAutoTriggered.current) {
                 biometricAutoTriggered.current = true;
 
-                // Try biometric login automatically
+                console.log('[BIOMETRIC] Starting...');
                 const authData = await authenticateBiometric();
+                console.log('[BIOMETRIC] Data:', { has: !!authData, email: authData?.email, hasToken: !!authData?.refreshToken });
 
                 if (authData) {
                     const { email, refreshToken } = authData;
 
+                    // Try automatic login with refresh token
                     if (refreshToken) {
                         try {
-                            // Use refreshSession instead of setSession
-                            const { data, error } = await supabase.auth.refreshSession({
+                            console.log('[BIOMETRIC] Attempting automatic login with refresh token...');
+
+                            const { data, error } = await supabase.auth.setSession({
+                                access_token: refreshToken,
                                 refresh_token: refreshToken
                             });
 
-                            if (!error && data.session) {
-                                // Login automático bem-sucedido!
+                            if (error) throw error;
+
+                            if (data.session) {
+                                console.log('[BIOMETRIC] ✅ Automatic login successful!');
                                 router.refresh();
                                 router.push("/");
                                 return;
                             }
-                        } catch (err) {
-                            console.error('Refresh session error:', err);
+                        } catch (error: any) {
+                            console.error('[BIOMETRIC] Refresh token invalid or expired:', error);
+                            // Token inválido - limpar dados biométricos
+                            localStorage.removeItem('biometric_refresh_token');
                         }
                     }
 
-                    // Fallback: preencher email e pedir senha
+                    // Fallback: apenas preencher email se não houver token ou se falhou
+                    console.log('[BIOMETRIC] Fallback: filling email only');
                     setEmail(email);
-                    alert('Biometria validada! Digite sua senha para continuar.');
-                } else {
-                    // Biometria falhou ou foi cancelada - mostrar login normal
-                    console.log('Biometric authentication cancelled or failed');
                 }
             }
         };
@@ -128,7 +133,7 @@ function LoginForm() {
 
         if (success) {
             setShowBiometricSetup(false);
-            alert('✅ Biometria ativada com sucesso!');
+            alert('✅ Biometria ativada com sucesso! Na próxima vez, só use seu dedo!');
             router.refresh();
             router.push("/");
         } else {
