@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, ArrowRight } from "lucide-react";
 import { getURL } from "../lib/utils";
 import { useBiometricAuth } from "@/hooks/useBiometricAuth";
-import BiometricPrompt from "../components/BiometricPrompt";
 import BiometricSetupPrompt from "../components/BiometricSetupPrompt";
 
 function LoginForm() {
@@ -22,17 +21,51 @@ function LoginForm() {
 
     // Biometric states
     const { isSupported, isEnrolled, isLoading: biometricLoading, registerBiometric, authenticateBiometric } = useBiometricAuth();
-    const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
     const [showBiometricSetup, setShowBiometricSetup] = useState(false);
-    const biometricPromptShown = useRef(false);
+    const biometricAutoTriggered = useRef(false);
 
-    // Check for biometric on mount - ONLY ONCE
+    // Auto-trigger biometric authentication when enrolled
     useEffect(() => {
-        if (isEnrolled && mode === 'login' && !biometricPromptShown.current) {
-            setShowBiometricPrompt(true);
-            biometricPromptShown.current = true;
-        }
-    }, [isEnrolled, mode]);
+        const tryBiometricLogin = async () => {
+            if (isEnrolled && mode === 'login' && !biometricAutoTriggered.current) {
+                biometricAutoTriggered.current = true;
+
+                // Try biometric login automatically
+                const authData = await authenticateBiometric();
+
+                if (authData) {
+                    const { email, refreshToken } = authData;
+
+                    if (refreshToken) {
+                        try {
+                            // Use refreshSession instead of setSession
+                            const { data, error } = await supabase.auth.refreshSession({
+                                refresh_token: refreshToken
+                            });
+
+                            if (!error && data.session) {
+                                // Login automático bem-sucedido!
+                                router.refresh();
+                                router.push("/");
+                                return;
+                            }
+                        } catch (err) {
+                            console.error('Refresh session error:', err);
+                        }
+                    }
+
+                    // Fallback: preencher email e pedir senha
+                    setEmail(email);
+                    alert('Biometria validada! Digite sua senha para continuar.');
+                } else {
+                    // Biometria falhou ou foi cancelada - mostrar login normal
+                    console.log('Biometric authentication cancelled or failed');
+                }
+            }
+        };
+
+        tryBiometricLogin();
+    }, [isEnrolled, mode, authenticateBiometric, router]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -83,42 +116,6 @@ function LoginForm() {
             }
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleBiometricLogin = async () => {
-        try {
-            const authData = await authenticateBiometric();
-
-            if (authData) {
-                const { email, refreshToken } = authData;
-
-                if (refreshToken) {
-                    // Restaurar sessão com refreshToken
-                    const { error } = await supabase.auth.setSession({
-                        access_token: '', // Será renovado pelo refresh
-                        refresh_token: refreshToken
-                    });
-
-                    if (!error) {
-                        // Login automático bem-sucedido!
-                        router.refresh();
-                        router.push("/");
-                        return;
-                    }
-                }
-
-                // Fallback: preencher email e pedir senha
-                setEmail(email);
-                setShowBiometricPrompt(false);
-                alert('Biometria verificada! Digite sua senha para continuar.');
-            } else {
-                setError('Falha na autenticação biométrica');
-            }
-        } catch (err) {
-            console.error('Biometric error:', err);
-            setError('Erro ao usar biometria');
-            setShowBiometricPrompt(false);
         }
     };
 
@@ -256,14 +253,7 @@ function LoginForm() {
                 </p>
             </div>
 
-            {/* Biometric Prompts */}
-            <BiometricPrompt
-                isOpen={showBiometricPrompt}
-                isLoading={biometricLoading}
-                onAuthenticate={handleBiometricLogin}
-                onCancel={() => setShowBiometricPrompt(false)}
-            />
-
+            {/* Biometric Setup Prompt */}
             <BiometricSetupPrompt
                 isOpen={showBiometricSetup}
                 isLoading={biometricLoading}

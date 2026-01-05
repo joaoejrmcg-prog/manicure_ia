@@ -81,10 +81,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         }
     }, [isAuthenticated, isAuthCallback, isPublicPage, isLoading]);
 
-    if (isLoading) {
+    if (isLoading && !isPublicPage) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <div className="min-h-screen flex items-center justify-center bg-neutral-950" suppressHydrationWarning>
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" suppressHydrationWarning></div>
             </div>
         );
     }
@@ -96,9 +96,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (!isAuthenticated && !isAuthCallback) {
         // Show loading state instead of null (black screen) while redirecting
         return (
-            <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <div className="min-h-screen flex items-center justify-center bg-neutral-950" suppressHydrationWarning>
+                <div className="flex flex-col items-center gap-4" suppressHydrationWarning>
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" suppressHydrationWarning></div>
                     <p className="text-neutral-400 text-sm">Redirecionando...</p>
                 </div>
             </div>
