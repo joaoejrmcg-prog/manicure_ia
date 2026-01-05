@@ -31,6 +31,9 @@ export const performLogout = async (router: AppRouterInstance) => {
         keysToRemove.forEach(key => localStorage.removeItem(key));
 
         // 3. Forçar redirecionamento e refresh para limpar estado da memória
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem('justLoggedOut', 'true');
+        }
         router.push('/login');
         router.refresh();
 

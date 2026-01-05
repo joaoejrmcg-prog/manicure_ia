@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Sparkles, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, ArrowRight, Fingerprint } from "lucide-react";
 import { getURL } from "../lib/utils";
 import { useBiometricAuth } from "@/hooks/useBiometricAuth";
 import BiometricSetupPrompt from "../components/BiometricSetupPrompt";
@@ -27,6 +27,15 @@ function LoginForm() {
     // Auto-trigger biometric authentication when enrolled
     useEffect(() => {
         const tryBiometricLogin = async () => {
+            // Check if user just logged out
+            const justLoggedOut = typeof window !== 'undefined' && sessionStorage.getItem('justLoggedOut') === 'true';
+
+            if (justLoggedOut) {
+                console.log('[BIOMETRIC] Auto-trigger skipped: User just logged out');
+                sessionStorage.removeItem('justLoggedOut'); // Clear flag for next time
+                return;
+            }
+
             if (isEnrolled && mode === 'login' && !biometricAutoTriggered.current) {
                 biometricAutoTriggered.current = true;
 
@@ -71,6 +80,25 @@ function LoginForm() {
 
         tryBiometricLogin();
     }, [isEnrolled, mode, authenticateBiometric]);
+
+    const handleManualBiometric = async () => {
+        biometricAutoTriggered.current = false; // Reset trigger
+        const authData = await authenticateBiometric();
+
+        if (authData) {
+            const { email, refreshToken } = authData;
+            if (refreshToken) {
+                try {
+                    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+                    if (!error && data.session) {
+                        window.location.href = '/';
+                        return;
+                    }
+                } catch (e) { console.error(e); }
+            }
+            setEmail(email);
+        }
+    };
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -233,6 +261,17 @@ function LoginForm() {
                             <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center">
                                 {error}
                             </div>
+                        )}
+
+                        {isEnrolled && mode === 'login' && (
+                            <button
+                                type="button"
+                                onClick={handleManualBiometric}
+                                className="w-full p-3 mb-3 bg-neutral-800/50 text-neutral-300 rounded-xl font-medium hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 border border-neutral-700/50 hover:border-neutral-600"
+                            >
+                                <Fingerprint className="w-5 h-5 text-blue-400" />
+                                Entrar com Biometria
+                            </button>
                         )}
 
                         <button
