@@ -25,6 +25,22 @@ export const performLogout = async (router: AppRouterInstance) => {
         // 2. Limpar TUDO do localStorage (garante que sessão do Supabase morra)
         localStorage.clear();
 
+        // 2.1 Limpar Cookies do Supabase (para evitar persistência via SSR/Cookie)
+        if (typeof document !== 'undefined') {
+            const cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i];
+                const eqPos = cookie.indexOf("=");
+                const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+                // Limpar cookies que começam com sb- (padrão do Supabase)
+                if (name.startsWith('sb-')) {
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=" + window.location.hostname;
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
+                }
+            }
+        }
+
         // 3. Restaurar dados biométricos
         if (biometricData.credential) localStorage.setItem('biometric_credential', biometricData.credential);
         if (biometricData.email) localStorage.setItem('biometric_email', biometricData.email);
