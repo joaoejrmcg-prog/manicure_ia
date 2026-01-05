@@ -31,7 +31,6 @@ function LoginForm() {
             const justLoggedOut = searchParams.get('logged_out') === 'true';
 
             if (justLoggedOut) {
-                console.log('[BIOMETRIC] Auto-trigger skipped: User just logged out');
                 // Remove param from URL cleanly without refresh if possible, or just ignore
                 return;
             }
@@ -39,9 +38,7 @@ function LoginForm() {
             if (isEnrolled && mode === 'login' && !biometricAutoTriggered.current) {
                 biometricAutoTriggered.current = true;
 
-                console.log('[BIOMETRIC] Starting...');
                 const authData = await authenticateBiometric();
-                console.log('[BIOMETRIC] Data:', { has: !!authData, email: authData?.email, hasToken: !!authData?.refreshToken });
 
                 if (authData) {
                     const { email, refreshToken } = authData;
@@ -49,8 +46,6 @@ function LoginForm() {
                     // Try automatic login with refresh token
                     if (refreshToken) {
                         try {
-                            console.log('[BIOMETRIC] Attempting automatic login with refresh token...');
-
                             // Use refreshSession() to get new access token from refresh token
                             const { data, error } = await supabase.auth.refreshSession({
                                 refresh_token: refreshToken
@@ -59,7 +54,6 @@ function LoginForm() {
                             if (error) throw error;
 
                             if (data.session) {
-                                console.log('[BIOMETRIC] ✅ Automatic login successful!');
                                 // Navigate immediately without waiting
                                 window.location.href = '/';
                                 return;
@@ -72,7 +66,6 @@ function LoginForm() {
                     }
 
                     // Fallback: apenas preencher email se não houver token ou se falhou
-                    console.log('[BIOMETRIC] Fallback: filling email only');
                     setEmail(email);
                 }
             }
@@ -155,12 +148,10 @@ function LoginForm() {
     const handleSetupBiometric = async () => {
         // Obter refresh token da sessão atual do Supabase
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('[BIOMETRIC] Setup - Session:', !!session, 'Has Token:', !!session?.refresh_token);
 
         const refreshToken = session?.refresh_token;
 
         if (!refreshToken) {
-            console.error('[BIOMETRIC] Cannot setup: No refresh token available');
             alert('Erro ao configurar biometria: Sessão inválida. Tente fazer login novamente.');
             return;
         }
@@ -312,15 +303,6 @@ function LoginForm() {
                 onSetup={handleSetupBiometric}
                 onSkip={handleSkipBiometric}
             />
-
-            {/* DEBUG PANEL - REMOVE BEFORE PRODUCTION */}
-            <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-green-400 text-[10px] p-2 font-mono max-h-32 overflow-y-auto z-50 pointer-events-none">
-                <p>Status Biometria:</p>
-                <p>Suportado: {isSupported ? 'SIM' : 'NÃO'}</p>
-                <p>Cadastrado: {isEnrolled ? 'SIM' : 'NÃO'}</p>
-                <p>Token Salvo: {typeof window !== 'undefined' && localStorage.getItem('biometric_refresh_token') ? 'SIM' : 'NÃO'}</p>
-                <p>Email Salvo: {typeof window !== 'undefined' && localStorage.getItem('biometric_email') || 'Nenhum'}</p>
-            </div>
         </div>
     );
 }

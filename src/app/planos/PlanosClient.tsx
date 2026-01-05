@@ -72,23 +72,34 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                 setPendingBillingType(billingType);
                 setShowCpfModal(true);
                 setIsLoading(false);
+                // NÃO limpar selectedPlan aqui, pois precisaremos dele após o CPF
                 return;
             }
 
-            if (response.ok && data.success && data.paymentUrl) {
-                // Redirect to success page with payment URL
-                window.location.href = data.paymentUrl;
+            if (response.ok && data.success) {
+                if (data.paymentUrl) {
+                    // Redirect to success page with payment URL
+                    window.location.href = data.paymentUrl;
+                } else {
+                    // Seamless upgrade (no payment URL needed)
+                    alert(data.message || 'Plano atualizado com sucesso!');
+                    router.refresh();
+                    router.push('/perfil'); // Redirect back to profile
+                }
+                setSelectedPlan(null); // Limpar apenas no sucesso final
             } else {
                 console.error('Payment error:', data);
                 alert('Erro ao processar pagamento: ' + (data.error || JSON.stringify(data.details) || 'Erro desconhecido'));
+                setSelectedPlan(null); // Limpar no erro
             }
 
         } catch (error) {
             console.error('Request error:', error);
             alert('Erro ao processar solicitação. Tente novamente.');
+            setSelectedPlan(null); // Limpar no erro
         } finally {
             setIsLoading(false);
-            setSelectedPlan(null);
+            // NÃO limpar selectedPlan aqui no finally
         }
     };
 

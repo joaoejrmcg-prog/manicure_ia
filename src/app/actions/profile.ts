@@ -75,7 +75,7 @@ export async function getSubscriptionDetails() {
 
     const { data: subscription } = await supabase
         .from('subscriptions')
-        .select('plan, status, current_period_end')
+        .select('plan, status, current_period_end, asaas_subscription_id')
         .eq('user_id', user.id)
         .single();
 
@@ -101,6 +101,19 @@ export async function getSubscriptionDetails() {
         subscription.status === 'trial' ||
         (subscription.status === 'canceled' && daysRemaining > 0);
 
+    let billingType = null;
+    if (subscription.asaas_subscription_id) {
+        try {
+            const { getAsaasSubscription } = await import('@/lib/asaas');
+            const asaasSub = await getAsaasSubscription(subscription.asaas_subscription_id);
+            if (asaasSub) {
+                billingType = asaasSub.billingType;
+            }
+        } catch (e) {
+            console.error('Error fetching Asaas subscription details:', e);
+        }
+    }
+
     return {
         plan: subscription.plan,
         status: subscription.status,
@@ -109,6 +122,7 @@ export async function getSubscriptionDetails() {
         aiLimit,
         isLifetime,
         isActive,
+        billingType
     };
 }
 

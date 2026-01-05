@@ -23,6 +23,7 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
     const [pendingBillingType, setPendingBillingType] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD' | null>(null);
+    const [isUpdateCardMode, setIsUpdateCardMode] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -144,6 +145,21 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                         billingType: billingType
                     })
                 });
+            } else if (billingType === 'CREDIT_CARD' && subscription.billingType === 'CREDIT_CARD') {
+                // Update Credit Card: Reuse checkout flow but ask for payment URL
+                response = await fetch('/api/asaas/checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({
+                        plan: profile.plan, // Same plan
+                        billingType: 'CREDIT_CARD',
+                        changePaymentMethod: true // Flag to force getting URL
+                    })
+                });
+
             } else if (selectedPlan) {
                 // Create new subscription (or renewal)
                 response = await fetch('/api/asaas/checkout', {
@@ -172,23 +188,40 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                 setPendingBillingType(billingType);
                 setShowCpfModal(true);
                 setIsLoading(false);
+                // NÃO limpar selectedPlan/Invoice aqui
                 return;
             }
 
-            if (response.ok && data.success && data.paymentUrl) {
-                window.location.href = data.paymentUrl;
+            if (response.ok && data.success) {
+                if (data.paymentUrl) {
+                    window.location.href = data.paymentUrl;
+                } else {
+                    // Seamless upgrade (no payment URL needed)
+                    alert(data.message || 'Plano atualizado com sucesso!');
+                    fetchInvoices(); // Refresh data
+                    router.refresh();
+                }
+
+                // Limpar no sucesso
+                setSelectedInvoiceId(null);
+                setSelectedPlan(null);
             } else {
                 console.error('Payment error:', data);
                 alert('Erro ao processar pagamento: ' + (data.error || JSON.stringify(data.details) || 'Erro desconhecido'));
+                // Limpar no erro
+                setSelectedInvoiceId(null);
+                setSelectedPlan(null);
             }
 
         } catch (error) {
             console.error('Request error:', error);
             alert('Erro ao processar solicitação. Tente novamente.');
-        } finally {
-            setIsLoading(false);
+            // Limpar no erro
             setSelectedInvoiceId(null);
             setSelectedPlan(null);
+        } finally {
+            setIsLoading(false);
+            // NÃO limpar aqui no finally
         }
     };
 
@@ -220,15 +253,33 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                     </button>
                 )}
 
-                {/* Botão de Pagar Mensalidade se for Ativo (Light ou Pro) E não tiver faturas pendentes */}
+                {/* Botões de Ação */}
                 {(profile.plan === 'light' || profile.plan === 'pro') && invoices.length === 0 && (
-                    <button
-                        onClick={handleRenew}
-                        disabled={isLoading}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Pagar Mensalidade
-                    </button>
+                    <div className="flex gap-2">
+                        {/* Se for Cartão de Crédito, mostra Gerenciar Pagamento */}
+                        {subscription.billingType === 'CREDIT_CARD' && (
+                            <button
+                                onClick={() => {
+                                    setSelectedPlan(profile.plan); // Keep plan
+                                    setShowPaymentModal(true); // Open modal
+                                }}
+                                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-sm font-medium transition-colors border border-neutral-700"
+                            >
+                                Gerenciar Pagamento
+                            </button>
+                        )}
+
+                        {/* Se NÃO for Cartão (Pix/Boleto), mostra Pagar Mensalidade (Renovar) */}
+                        {subscription.billingType !== 'CREDIT_CARD' && (
+                            <button
+                                onClick={handleRenew}
+                                disabled={isLoading}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Pagar Mensalidade
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
 
@@ -333,7 +384,11 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                 <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm p-4">
                     <div className="bg-neutral-900 p-6 rounded-xl border border-neutral-800 w-full max-w-md">
                         <h2 className="text-xl font-bold text-white mb-4">
-                            {selectedInvoiceId ? 'Pagar Fatura' : (selectedPlan === profile.plan ? 'Renovar Assinatura' : 'Assinar Plano')}
+                            {selectedInvoiceId
+                                ? 'Pagar Fatura'
+                                : (subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan
+                                    ? 'Gerenciar Assinatura'
+                                    : (selectedPlan === profile.plan ? 'Renovar Assinatura' : 'Assinar Plano'))}
                         </h2>
 
                         {/* Plan Selection if not paying invoice */}
@@ -370,8 +425,14 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                                     <div className="flex items-center gap-3">
                                         <span className="text-2xl">💠</span>
                                         <div className="text-left">
-                                            <span className="font-medium text-white block">Pix</span>
-                                            <span className="text-xs text-neutral-500">Pagamento mensal avulso</span>
+                                            <span className="font-medium text-white block">
+                                                {subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan ? 'Mudar para Pix' : 'Pix'}
+                                            </span>
+                                            <span className="text-xs text-neutral-500">
+                                                {subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan
+                                                    ? 'Cancela a cobrança no cartão'
+                                                    : 'Pagamento mensal avulso'}
+                                            </span>
                                         </div>
                                     </div>
                                     <span className="text-neutral-500 group-hover:text-white">→</span>
@@ -387,8 +448,14 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                                     <div className="flex items-center gap-3">
                                         <span className="text-2xl">📄</span>
                                         <div className="text-left">
-                                            <span className="font-medium text-white block">Boleto Bancário</span>
-                                            <span className="text-xs text-neutral-500">Pagamento mensal avulso</span>
+                                            <span className="font-medium text-white block">
+                                                {subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan ? 'Mudar para Boleto' : 'Boleto Bancário'}
+                                            </span>
+                                            <span className="text-xs text-neutral-500">
+                                                {subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan
+                                                    ? 'Cancela a cobrança no cartão'
+                                                    : 'Pagamento mensal avulso'}
+                                            </span>
                                         </div>
                                     </div>
                                     <span className="text-neutral-500 group-hover:text-white">→</span>
@@ -404,8 +471,14 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                                     <div className="flex items-center gap-3">
                                         <span className="text-2xl">💳</span>
                                         <div className="text-left">
-                                            <span className="font-medium text-white block">Cartão de Crédito</span>
-                                            <span className="text-xs text-neutral-500">Assinatura recorrente</span>
+                                            <span className="font-medium text-white block">
+                                                {subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan ? 'Atualizar Cartão' : 'Cartão de Crédito'}
+                                            </span>
+                                            <span className="text-xs text-neutral-500">
+                                                {subscription.billingType === 'CREDIT_CARD' && selectedPlan === profile.plan
+                                                    ? 'Trocar cartão da assinatura'
+                                                    : 'Assinatura recorrente'}
+                                            </span>
                                         </div>
                                     </div>
                                     <span className="text-neutral-500 group-hover:text-white">→</span>

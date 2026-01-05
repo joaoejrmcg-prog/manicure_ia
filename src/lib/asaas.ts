@@ -138,3 +138,68 @@ export async function getAsaasSubscription(id: string) {
 
     return response.json();
 }
+
+export async function updateAsaasSubscription(id: string, data: {
+    value?: number;
+    description?: string;
+    cycle?: 'MONTHLY' | 'WEEKLY' | 'YEARLY';
+    nextDueDate?: string;
+    updatePendingPayments?: boolean;
+}) {
+    const response = await fetch(`${ASAAS_API_URL}/subscriptions/${id}`, {
+        method: 'POST', // Asaas uses POST for updates usually, or PUT. Docs say POST for update.
+        headers: {
+            'Content-Type': 'application/json',
+            'access_token': ASAAS_API_KEY!
+        },
+        body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Failed to update Asaas subscription: ${JSON.stringify(errorData)}`);
+    }
+
+    return response.json();
+}
+
+export async function createAsaasCharge(chargeData: {
+    customer: string;
+    billingType: 'BOLETO' | 'CREDIT_CARD' | 'PIX' | 'UNDEFINED';
+    value: number;
+    dueDate: string;
+    description?: string;
+    externalReference: string;
+}) {
+    const response = await fetch(`${ASAAS_API_URL}/payments`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'access_token': ASAAS_API_KEY!
+        },
+        body: JSON.stringify(chargeData)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Failed to create Asaas charge: ${JSON.stringify(errorData)}`);
+    }
+
+    return response.json();
+}
+
+export async function cancelAsaasSubscription(subscriptionId: string) {
+    const response = await fetch(`${ASAAS_API_URL}/subscriptions/${subscriptionId}`, {
+        method: 'DELETE',
+        headers: {
+            'access_token': ASAAS_API_KEY!
+        }
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Failed to cancel Asaas subscription: ${JSON.stringify(errorData)}`);
+    }
+
+    return response.json();
+}

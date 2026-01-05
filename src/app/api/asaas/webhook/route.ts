@@ -46,32 +46,114 @@ export async function POST(req: NextRequest) {
         console.log(`Processing Webhook for Subscription ID: ${subscriptionId}`);
 
         if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
-            // Calculate new period end (same day next month)
-            const paymentDate = new Date(payment.paymentDate || payment.dateCreated);
-            const newPeriodEnd = new Date(paymentDate);
-            newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1); // Add 1 month (keeps same day)
 
-            // DEBUG: Check if subscription exists
-            const { data: subCheck, error: checkError } = await supabaseAdmin
+            // CHECK FOR PRO-RATA UPGRADE
+            if (payment.externalReference && payment.externalReference.startsWith('UPGRADE|')) {
+                console.log('[WEBHOOK] Pro-rata upgrade payment confirmed:', payment.externalReference);
+                const parts = payment.externalReference.split('|');
+                const userId = parts[1];
+                const newPlan = parts[2];
+
+                if (userId && newPlan) {
+                    // 1. Get current subscription
+                    const { data: currentSub } = await supabaseAdmin
+                        .from('subscriptions')
+                        .select('*')
+                        .eq('user_id', userId)
+                        .single();
+
+                    if (currentSub && currentSub.asaas_subscription_id) {
+                        // 2. Update Asaas Subscription Value
+                        const { updateAsaasSubscription } = await import('@/lib/asaas');
+                        const PLANS = { 'light': 19.90, 'pro': 39.90 };
+                        const newValue = PLANS[newPlan as keyof typeof PLANS];
+
+                        if (newValue) {
+                            await updateAsaasSubscription(currentSub.asaas_subscription_id, {
+                                value: newValue,
+                                description: `Assinatura Plano ${newPlan.charAt(0).toUpperCase() + newPlan.slice(1)}`,
+                                updatePendingPayments: true
+                            });
+                            console.log('[WEBHOOK] Asaas subscription updated to new plan value.');
+                        }
+
+                        // 3. Update DB
+                        const { error: updateError } = await supabaseAdmin
+                            .from('subscriptions')
+                            .update({
+                                plan: newPlan,
+                                status: 'active'
+                            })
+                            .eq('user_id', userId);
+
+                        if (updateError) console.error('Failed to update DB for upgrade:', updateError);
+                        else console.log('[WEBHOOK] DB updated to new plan.');
+
+                        return NextResponse.json({ received: true, message: 'Upgrade processed' });
+                    }
+                }
+            }
+
+            if (!payment.subscription) {
+                // Not a subscription payment (and not a handled upgrade)
+                return NextResponse.json({ received: true });
+            }
+
+            const subscriptionId = payment.subscription;
+
+            // 1. Fetch current subscription to determine base date
+            const { data: currentSub, error: fetchError } = await supabaseAdmin
                 .from('subscriptions')
-                .select('user_id, status')
+                .select('current_period_end, status')
                 .eq('asaas_subscription_id', subscriptionId)
                 .single();
 
-            console.log('DB Check Result:', subCheck, 'Error:', checkError);
-
-            if (!subCheck) {
+            if (fetchError || !currentSub) {
                 console.error(`Subscription not found in DB for Asaas ID: ${subscriptionId}`);
                 return NextResponse.json({ received: true, warning: 'Subscription not found' });
             }
 
-            // Update subscription
+            // 2. Calculate new period end
+            // Logic: New End = MAX(Current End, Now) + 1 Month
+            const now = new Date();
+            const currentEnd = currentSub.current_period_end ? new Date(currentSub.current_period_end) : new Date(0);
+
+            // If subscription is expired (end < now), start from now. If active (end > now), start from end.
+            const baseDate = currentEnd > now ? currentEnd : now;
+
+            const newPeriodEnd = new Date(baseDate);
+            newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1);
+
+            console.log('--- WEBHOOK DATE DEBUG ---');
+            console.log('Now:', now.toISOString());
+            console.log('Current End (DB):', currentEnd.toISOString());
+            console.log('Base Date (Selected):', baseDate.toISOString());
+            console.log('New Period End (Calculated):', newPeriodEnd.toISOString());
+            console.log('--------------------------');
+
+            console.log(`[WEBHOOK] Extending subscription. Base: ${baseDate.toISOString()}, New End: ${newPeriodEnd.toISOString()}`);
+
+            // Determine plan based on payment value
+            let planName = undefined;
+            if (payment.value) {
+                if (payment.value === 19.90) planName = 'light';
+                else if (payment.value === 39.90) planName = 'pro';
+            }
+
+            // 3. Update subscription
+            const updateData: any = {
+                status: 'active',
+                current_period_end: newPeriodEnd.toISOString()
+            };
+
+            if (planName) {
+                updateData.plan = planName;
+                console.log(`[WEBHOOK] Updating plan to ${planName} based on payment value ${payment.value}`);
+            }
+
             const { error } = await supabaseAdmin
                 .from('subscriptions')
-                .update({
-                    status: 'active',
-                    current_period_end: newPeriodEnd.toISOString()
-                })
+                .update(updateData)
                 .eq('asaas_subscription_id', subscriptionId);
 
             if (error) {

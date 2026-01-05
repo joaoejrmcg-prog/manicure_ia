@@ -25,7 +25,6 @@ export function useBiometricAuth() {
      * Também armazena token de refresh do Supabase para login automático
      */
     const registerBiometric = async (email: string, refreshToken?: string): Promise<boolean> => {
-        console.log('[BIOMETRIC] Registering for:', email, 'Has token:', !!refreshToken);
 
         if (!isSupported) {
             console.log('WebAuthn não suportado neste navegador');
@@ -75,11 +74,9 @@ export function useBiometricAuth() {
                 localStorage.setItem('biometric_email', email);
 
                 // Salvar refresh token se fornecido
+                // Salvar refresh token se fornecido
                 if (refreshToken) {
-                    console.log('[BIOMETRIC] Saving refresh token to localStorage');
                     localStorage.setItem('biometric_refresh_token', refreshToken);
-                } else {
-                    console.warn('[BIOMETRIC] No refresh token provided during registration!');
                 }
 
                 localStorage.setItem('biometric_enrolled', 'true');

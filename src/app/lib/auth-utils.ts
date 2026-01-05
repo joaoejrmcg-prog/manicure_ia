@@ -12,8 +12,6 @@ export const performLogout = async (router: AppRouterInstance) => {
     const hasBiometrics = typeof window !== 'undefined' && localStorage.getItem('biometric_enrolled') === 'true';
 
     if (hasBiometrics) {
-        console.log('[AUTH] Performing Soft Logout for Biometric User');
-
         // 1. Salvar dados biométricos
         const biometricData = {
             credential: localStorage.getItem('biometric_credential'),
@@ -52,7 +50,6 @@ export const performLogout = async (router: AppRouterInstance) => {
         router.refresh();
 
     } else {
-        console.log('[AUTH] Performing Hard Logout');
         await supabase.auth.signOut();
         router.push('/login');
     }
