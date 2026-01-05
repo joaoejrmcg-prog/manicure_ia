@@ -260,7 +260,17 @@ export const DataManager = {
             .order('created_at', { ascending: false });
 
         if (startDate && endDate) {
-            query = query.gte('created_at', startDate).lte('created_at', endDate);
+            // Logic:
+            // 1. If status is 'pending', check 'due_date'
+            // 2. If status is NOT 'pending' (paid), check 'created_at' (or payment date if we had it, but created_at is the proxy for now)
+
+            // Supabase .or() syntax with nested ANDs:
+            // or(and(status.eq.pending,due_date.gte.Start,due_date.lte.End),and(status.neq.pending,created_at.gte.Start,created_at.lte.End))
+
+            const pendingFilter = `and(status.eq.pending,due_date.gte.${startDate},due_date.lte.${endDate})`;
+            const paidFilter = `and(status.neq.pending,created_at.gte.${startDate},created_at.lte.${endDate})`;
+
+            query = query.or(`${pendingFilter},${paidFilter}`);
         } else {
             // Fallback for no date range (e.g. initial load if not provided, though we plan to always provide it)
             query = query.limit(500);
@@ -342,6 +352,22 @@ export const DataManager = {
 
         if (error && error.code !== 'PGRST116') throw error;
         return data as FinancialRecord | null;
+    },
+
+    getPendingFinancialRecords: async (type: 'income' | 'expense') => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        const { data, error } = await supabase
+            .from('financial_records')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .eq('type', type)
+            .order('due_date', { ascending: true });
+
+        if (error) throw error;
+        return data as FinancialRecord[];
     },
 
     findPendingTransactionsByClient: async (clientName: string) => {

@@ -7,6 +7,7 @@ import { ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import PlanCard from "../components/PlanCard";
 import { createBrowserClient } from '@supabase/ssr';
 import { plansData } from "../utils/plans";
+import CpfInputModal from "../components/CpfInputModal";
 
 interface PlanosClientProps {
     currentPlan: string;
@@ -16,6 +17,8 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showCpfModal, setShowCpfModal] = useState(false);
+    const [pendingBillingType, setPendingBillingType] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD' | null>(null);
     const router = useRouter();
 
 
@@ -63,6 +66,15 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
 
             const data = await response.json();
 
+            // Check if CPF is required
+            if (!response.ok && data.code === 'CPF_REQUIRED') {
+                console.log('[CPF] CPF required, opening modal...');
+                setPendingBillingType(billingType);
+                setShowCpfModal(true);
+                setIsLoading(false);
+                return;
+            }
+
             if (response.ok && data.success && data.paymentUrl) {
                 // Redirect to success page with payment URL
                 window.location.href = data.paymentUrl;
@@ -77,6 +89,18 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
         } finally {
             setIsLoading(false);
             setSelectedPlan(null);
+        }
+    };
+
+    const handleCpfSuccess = (cpf: string) => {
+        console.log('[CPF] CPF saved successfully:', cpf);
+        setShowCpfModal(false);
+
+        // Retry payment with the pending billing type
+        if (pendingBillingType) {
+            console.log('[CPF] Retrying payment with', pendingBillingType);
+            handleConfirmPayment(pendingBillingType);
+            setPendingBillingType(null);
         }
     };
 
@@ -121,35 +145,50 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                             <div className="space-y-3">
                                 <button
                                     onClick={() => handleConfirmPayment('PIX')}
-                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors group"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-2xl">💠</span>
-                                        <span className="font-medium text-white">Pix</span>
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">💠</span>
+                                            <div className="text-left">
+                                                <span className="font-medium text-white block">Pix</span>
+                                                <span className="text-xs text-neutral-500">Pagamento mensal avulso</span>
+                                            </div>
+                                        </div>
+                                        <span className="text-neutral-500 group-hover:text-white">→</span>
                                     </div>
-                                    <span className="text-neutral-500 group-hover:text-white">→</span>
                                 </button>
 
                                 <button
                                     onClick={() => handleConfirmPayment('BOLETO')}
-                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors group"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-2xl">📄</span>
-                                        <span className="font-medium text-white">Boleto Bancário</span>
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">📄</span>
+                                            <div className="text-left">
+                                                <span className="font-medium text-white block">Boleto Bancário</span>
+                                                <span className="text-xs text-neutral-500">Pagamento mensal avulso</span>
+                                            </div>
+                                        </div>
+                                        <span className="text-neutral-500 group-hover:text-white">→</span>
                                     </div>
-                                    <span className="text-neutral-500 group-hover:text-white">→</span>
                                 </button>
 
                                 <button
                                     onClick={() => handleConfirmPayment('CREDIT_CARD')}
-                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                    className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors group"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-2xl">💳</span>
-                                        <span className="font-medium text-white">Cartão de Crédito</span>
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">💳</span>
+                                            <div className="text-left">
+                                                <span className="font-medium text-white block">Cartão de Crédito</span>
+                                                <span className="text-xs text-neutral-500">Assinatura recorrente</span>
+                                            </div>
+                                        </div>
+                                        <span className="text-neutral-500 group-hover:text-white">→</span>
                                     </div>
-                                    <span className="text-neutral-500 group-hover:text-white">→</span>
                                 </button>
                             </div>
 
@@ -177,6 +216,13 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                         />
                     ))}
                 </div>
+
+                {/* CPF Input Modal */}
+                <CpfInputModal
+                    isOpen={showCpfModal}
+                    onClose={() => setShowCpfModal(false)}
+                    onSuccess={handleCpfSuccess}
+                />
             </div>
         </div>
     );

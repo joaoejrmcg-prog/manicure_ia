@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { checkAndIncrementUsage, getDailyUsage, refundUsageAction } from "../actions/usage";
 import { VoiceOrb } from "./VoiceOrb";
+import { getRandomTip } from "@/lib/tips";
 
 type Message = {
     id: string;
@@ -126,6 +127,23 @@ export default function CommandCenter() {
                 // Update local count to reflect refund
                 setUsageCount(prev => Math.max(0, prev - 1));
             });
+        }
+
+        // Add random tip after success messages (30% chance)
+        if (role === 'assistant' && type === 'success') {
+            // 30% probability
+            if (Math.random() < 0.3) {
+                // Delay slightly so tip appears after success message
+                setTimeout(() => {
+                    const randomTip = getRandomTip();
+                    setMessages(prev => [...prev, {
+                        id: Math.random().toString(36).substring(7),
+                        role: 'assistant',
+                        content: `💡 **Dica:** ${randomTip}`,
+                        type: 'text'
+                    }]);
+                }, 500); // 500ms delay for better UX
+            }
         }
     };
 
@@ -701,8 +719,8 @@ export default function CommandCenter() {
             switch (response.intent) {
                 case 'CONFIRMATION_REQUIRED':
                     // Check if we are missing critical data even if AI asked for confirmation
-                    // Only force ASK_PAYMENT_METHOD if we have client and service but missing payment
-                    if (response.data?.originalIntent === 'REGISTER_SALE' && !response.data?.paymentMethod && response.data?.clientName && response.data?.service) {
+                    // Only force ASK_PAYMENT_METHOD if we have client, service AND amount but missing payment
+                    if (response.data?.originalIntent === 'REGISTER_SALE' && response.data?.amount && !response.data?.paymentMethod && response.data?.clientName && response.data?.service) {
                         addMessage('assistant', response.message);
                         setConversationState({
                             type: 'ASK_PAYMENT_METHOD',
@@ -751,12 +769,12 @@ export default function CommandCenter() {
                                     const spoken = `A ${client.name} vem ${dateStr} às ${timeStr}.`;
 
                                     if (!await checkLimit()) break;
-                                    addMessage('assistant', msg);
+                                    addMessage('assistant', msg, 'success');
                                     await playAudioWithCache(spoken, undefined, inputType);
                                 } else {
                                     const msg = `A cliente ${client.name} não tem agendamentos futuros.`;
                                     if (!await checkLimit()) break;
-                                    addMessage('assistant', msg);
+                                    addMessage('assistant', msg, 'success');
                                     await playAudioWithCache(msg, undefined, inputType);
                                 }
                             } else {
@@ -793,67 +811,138 @@ export default function CommandCenter() {
 
                         // Client found -> Execute Action
                         if (response.intent === 'REGISTER_SALE') {
-                            // Sanitize amount
-                            const amount = Number(String(response.data.amount).replace(',', '.'));
+                            // Sanitize amount - handle various formats
+                            let amountStr = String(response.data.amount || '').trim();
+                            // Remove R$, espaços, e converte vírgula para ponto
+                            amountStr = amountStr.replace(/R\$|\.(?=\d{3})/g, '').replace(',', '.').trim();
+                            const amount = Number(amountStr);
 
                             // Validate amount
-                            if (isNaN(amount) || amount <= 0) {
+                            if (!amount || isNaN(amount) || amount <= 0) {
                                 // Amount is missing or invalid. 
                                 // The AI likely asked for it in response.message.
                                 // Just show the message and let the user reply (IDLE state).
-                                addMessage('assistant', response.message);
+                                addMessage('assistant', response.message || "Por favor, informe o valor do serviço.");
                                 return;
                             }
 
-                            // Check if it's a pending sale
+                            // Installment Logic
+                            const installments = response.data.installments || 1;
+                            const downPayment = response.data.downPayment || 0;
+                            const installmentValue = response.data.installmentValue || (amount - downPayment) / (installments - (downPayment > 0 ? 0 : 0)); // If downPayment exists, it's separate usually? AI logic says: "Entrada + 2x". So installments=3 (total) or 2 (remaining)?
+                            // Let's stick to the plan: AI normalizes to TOTAL installments.
+                            // Case 1: "300 em 3x" -> amount=300, installments=3, downPayment=0. Each = 100.
+                            // Case 2: "Entrada 50 + 2x 100" -> amount=250, downPayment=50, installments=3 (1+2).
 
-                            // Check if it's a pending sale
-                            // If status is pending OR if there is a valid future due date, treat as pending
-                            let isPending = response.data.status === 'pending';
-                            let dueDate = response.data.dueDate;
-
-                            // Fallback: If AI forgot status='pending' but sent a due date, infer pending
-                            if (!isPending && dueDate && dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                                isPending = true;
+                            // Actually, let's trust the AI's "installmentValue" if present.
+                            let finalInstallmentValue = response.data.installmentValue;
+                            if (!finalInstallmentValue) {
+                                if (downPayment > 0) {
+                                    // If downPayment is set, we assume the rest is split among (installments - 1)
+                                    // Example: 3x total. 1 is downPayment. 2 are future.
+                                    if (installments > 1) {
+                                        finalInstallmentValue = (amount - downPayment) / (installments - 1);
+                                    } else {
+                                        finalInstallmentValue = 0; // Should not happen if installments=1 and downPayment=amount
+                                    }
+                                } else {
+                                    finalInstallmentValue = amount / installments;
+                                }
                             }
 
-                            if (isPending) {
-                                await DataManager.addTransaction({
-                                    type: 'income',
-                                    amount: amount,
-                                    description: response.data.service,
-                                    client_id: client.id,
-                                    status: 'pending',
-                                    due_date: dueDate
-                                });
-                                addMessage('assistant', response.message, 'success');
-                            } else {
-                                // Standard sale (paid now)
-                                // Safeguard: If paymentMethod is too long, it's likely a hallucination/sentence. Treat as missing.
-                                const isValidPaymentMethod = response.data.paymentMethod && response.data.paymentMethod.length < 30;
-
-                                if (!isValidPaymentMethod) {
+                            // 1. Handle Down Payment (or Single Payment)
+                            if (downPayment > 0) {
+                                // Entry is ALWAYS paid immediately (or at least treated as such for now, unless AI says otherwise, but "Entrada" implies now)
+                                // If paymentMethod missing for entry?
+                                if (!response.data.paymentMethod) {
                                     setConversationState({
                                         type: 'ASK_PAYMENT_METHOD',
                                         data: {
-                                            transactionData: { ...response.data, amount }, // Pass sanitized amount
+                                            transactionData: { ...response.data, amount: downPayment, isEntry: true, remainingInstallments: installments - 1, remainingValue: finalInstallmentValue, fullAmount: amount },
                                             clientName: client.name
                                         }
                                     });
-                                    addMessage('assistant', "Qual foi a forma de pagamento? (Pix, Dinheiro, Cartão...)");
+                                    addMessage('assistant', `Certo, entrada de R$${downPayment}. Qual a forma de pagamento da entrada?`);
                                     return;
                                 }
 
                                 await DataManager.addTransaction({
                                     type: 'income',
-                                    amount: amount,
-                                    description: response.data.service,
+                                    amount: downPayment,
+                                    description: `${response.data.service} (Entrada)`,
                                     payment_method: response.data.paymentMethod,
                                     client_id: client.id,
                                     status: 'paid'
                                 });
-                                addMessage('assistant', response.message, 'success');
                             }
+
+                            // 2. Handle Future Installments
+                            const startIdx = downPayment > 0 ? 1 : 0; // If downPayment, we already did 1.
+                            const loopCount = downPayment > 0 ? installments - 1 : installments;
+
+                            if (loopCount > 0) {
+                                // If it's a standard sale without downPayment, the first one might be PAID or PENDING depending on status.
+                                // If status='pending', ALL are pending.
+                                // If status='paid' (default), usually implies "Credit Card" where you receive all? 
+                                // NO, for a small business, "3x no cartão" usually means receiving in 3 months (if not anticipated).
+                                // BUT "3x no dinheiro/promissória" means 3 months.
+                                // Let's assume: If "Pending", all pending. If "Paid" and installments > 1, it might be Credit Card (treated as 1 receipt? or 3?)
+                                // User request: "Generate records... If 2 times, generate 2 records."
+
+                                // If status is PAID and method is CREDIT_CARD, usually we register 1 sale of total amount?
+                                // User said: "Precisa entender que é necessário a quantidade de vezes e então gerar registros no banco de dados."
+                                // So we generate N records regardless.
+
+                                const baseDate = response.data.dueDate ? new Date(response.data.dueDate) : new Date();
+                                for (let i = 0; i < loopCount; i++) {
+                                    const isFirstOfLoop = i === 0;
+                                    // Calculate Date
+                                    // Create a fresh date from baseDate to avoid mutation issues
+                                    const date = new Date(baseDate.getTime()); // Clone
+                                    const monthOffset = i;
+
+                                    // Safe month increment handling day overflow (e.g. Jan 31 -> Feb 28/29)
+                                    const targetMonth = date.getMonth() + monthOffset;
+                                    date.setMonth(targetMonth);
+
+                                    // If day changed (overflow), set to last day of previous month
+                                    if (date.getDate() !== baseDate.getDate()) {
+                                        date.setDate(0);
+                                    }
+
+                                    const dateStr = date.toISOString().split('T')[0];
+
+                                    // Status Logic
+                                    // If downPayment > 0, future ones are PENDING.
+                                    // If NO downPayment:
+                                    //   - If status='pending', ALL pending.
+                                    //   - If status='paid', 1st is PAID, others PENDING? Or all PAID (Credit Card)?
+                                    //   - Let's assume: If PaymentMethod is Credit Card, all are PAID (technically approved).
+                                    //   - If PaymentMethod is "Promissória/Fiado", all PENDING.
+                                    //   - For safety: If installments > 1, force PENDING for i > 0 unless explicitly "Paid".
+
+                                    let currentStatus = response.data.status || 'paid';
+                                    if (i > 0 && !response.data.paymentMethod?.toLowerCase().includes('cartão')) {
+                                        currentStatus = 'pending';
+                                    }
+                                    // If downPayment exists, all remaining are pending usually
+                                    if (downPayment > 0) currentStatus = 'pending';
+
+
+
+                                    await DataManager.addTransaction({
+                                        type: 'income',
+                                        amount: finalInstallmentValue,
+                                        description: `${response.data.service} (${i + 1 + (downPayment > 0 ? 1 : 0)}/${installments})`,
+                                        payment_method: response.data.paymentMethod,
+                                        client_id: client.id,
+                                        status: currentStatus,
+                                        due_date: dateStr
+                                    });
+                                }
+                            }
+
+                            addMessage('assistant', response.message, 'success');
                         } else if (response.intent === 'SCHEDULE_SERVICE') {
                             if (!response.data.service) {
                                 setConversationState({
@@ -899,35 +988,87 @@ export default function CommandCenter() {
 
                 case 'LIST_CLIENTS':
                     const clients = await DataManager.getClients();
-                    if (clients.length === 0) addMessage('assistant', "Nenhuma cliente cadastrada.", 'text');
-                    else addMessage('assistant', `Clientes: ${clients.map(c => c.name).join(", ")}`, 'text');
+                    if (clients.length === 0) addMessage('assistant', "Nenhuma cliente cadastrada.", 'success');
+                    else addMessage('assistant', `Clientes: ${clients.map(c => c.name).join(", ")}`, 'success');
                     break;
 
                 case 'REGISTER_EXPENSE':
                     const expenseStatus = response.data.status || 'paid';
                     const expensePaymentMethod = response.data.paymentMethod;
 
-                    // If paid and no payment method, ask for it
-                    if (expenseStatus === 'paid' && !expensePaymentMethod) {
-                        setConversationState({
-                            type: 'ASK_PAYMENT_METHOD',
-                            data: {
-                                transactionData: { ...response.data, type: 'expense' },
-                                clientName: '' // Not needed for expenses
+
+
+                    // Installment Logic for Expense
+                    const expInstallments = response.data.installments || 1;
+                    const expDownPayment = response.data.downPayment || 0;
+
+                    // Calculate installment value if not provided
+                    let expFinalInstallmentValue = response.data.installmentValue;
+                    if (!expFinalInstallmentValue) {
+                        if (expDownPayment > 0) {
+                            if (expInstallments > 1) {
+                                expFinalInstallmentValue = (response.data.amount - expDownPayment) / (expInstallments - 1);
+                            } else {
+                                expFinalInstallmentValue = 0;
                             }
-                        });
-                        addMessage('assistant', "Qual foi a forma de pagamento? (Pix, Dinheiro, Cartão...)");
-                        return;
+                        } else {
+                            expFinalInstallmentValue = response.data.amount / expInstallments;
+                        }
                     }
 
-                    await DataManager.addTransaction({
-                        type: 'expense',
-                        amount: response.data.amount,
-                        description: response.data.description,
-                        status: expenseStatus,
-                        payment_method: expensePaymentMethod,
-                        due_date: response.data.dueDate
-                    });
+                    // 1. Handle Down Payment (Entry)
+                    if (expDownPayment > 0) {
+
+
+                        await DataManager.addTransaction({
+                            type: 'expense',
+                            amount: expDownPayment,
+                            description: `${response.data.description} (Entrada)`,
+                            payment_method: expensePaymentMethod,
+                            status: 'paid' // Entry is paid
+                        });
+                    }
+
+                    // 2. Handle Future Installments
+                    const expStartIdx = expDownPayment > 0 ? 1 : 0;
+                    const expLoopCount = expDownPayment > 0 ? expInstallments - 1 : expInstallments;
+
+                    if (expLoopCount > 0) {
+                        const baseDate = response.data.dueDate ? new Date(response.data.dueDate) : new Date();
+
+                        for (let i = 0; i < expLoopCount; i++) {
+                            const isFirstOfLoop = i === 0;
+                            const date = new Date(baseDate.getTime()); // Clone
+                            const monthOffset = i;
+
+                            const targetMonth = date.getMonth() + monthOffset;
+                            date.setMonth(targetMonth);
+
+                            // Handle day overflow
+                            if (date.getDate() !== baseDate.getDate()) {
+                                date.setDate(0);
+                            }
+
+                            const dateStr = date.toISOString().split('T')[0];
+
+                            let currentStatus = expenseStatus;
+                            // If installments > 1, usually future ones are pending unless explicitly paid (e.g. credit card bill paid in full? No, expense installments usually mean future payments)
+                            if (i > 0 || expDownPayment > 0) {
+                                currentStatus = 'pending';
+                            }
+
+
+
+                            await DataManager.addTransaction({
+                                type: 'expense',
+                                amount: expFinalInstallmentValue,
+                                description: `${response.data.description} (${i + 1 + (expDownPayment > 0 ? 1 : 0)}/${expInstallments})`,
+                                payment_method: expensePaymentMethod,
+                                status: currentStatus,
+                                due_date: dateStr
+                            });
+                        }
+                    }
                     addMessage('assistant', response.message, 'success');
                     break;
 
@@ -1001,8 +1142,9 @@ export default function CommandCenter() {
 
                 case 'REPORT':
                     if (!await checkLimit()) break;
-                    const { entity, metric, period, filter } = response.data;
+                    const { entity, metric, period, filter, type, status } = response.data;
                     const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Normalize to start of day
 
                     if (entity === 'APPOINTMENT') {
                         const appointments = await DataManager.getAppointments();
@@ -1024,13 +1166,22 @@ export default function CommandCenter() {
                                 const targetY = response.data.targetYear || today.getFullYear();
                                 return d.getMonth() === targetM && d.getFullYear() === targetY;
                             }
+                            if (period === 'SPECIFIC_DATE' && response.data.targetDate) {
+                                // targetDate format: YYYY-MM-DD
+                                // d is Date object
+                                const targetDateStr = response.data.targetDate;
+                                // Create date object from target string to compare properly (ignoring time)
+                                // But simpler: compare YYYY-MM-DD strings
+                                const dStr = d.toISOString().split('T')[0];
+                                return dStr === targetDateStr;
+                            }
                             return true;
                         });
 
                         if (metric === 'COUNT') {
-                            addMessage('assistant', `Você tem ${filtered.length} agendamentos.`, 'text');
+                            addMessage('assistant', `Você tem ${filtered.length} agendamentos.`, 'success');
                         } else {
-                            if (filtered.length === 0) addMessage('assistant', "Nada agendado para este período.", 'text');
+                            if (filtered.length === 0) addMessage('assistant', "Nada agendado para este período.", 'success');
                             else {
                                 const list = filtered.map(a => {
                                     const d = new Date(a.date_time);
@@ -1039,42 +1190,121 @@ export default function CommandCenter() {
                                     const dateStr = isToday ? time : `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${time}`;
                                     return `• ${dateStr} - ${a.client?.name || 'Cliente'} (${a.description})`;
                                 }).join('\n');
-                                addMessage('assistant', `Agenda:\n${list}`, 'text');
+                                addMessage('assistant', `Agenda:\n${list}`, 'success');
                             }
                         }
 
                     }
                     else if (entity === 'FINANCIAL') {
-                        const records = await DataManager.getFinancialSummary();
-                        const filtered = records.filter(r => {
-                            const d = new Date(r.created_at);
-                            if (period === 'TODAY') return d.toDateString() === today.toDateString();
-                            if (period === 'TOMORROW') {
-                                const tomorrow = new Date(today);
-                                tomorrow.setDate(tomorrow.getDate() + 1);
-                                return d.toDateString() === tomorrow.toDateString();
-                            }
-                            if (period === 'NEXT_MONTH') {
-                                const nextMonth = new Date(today);
-                                nextMonth.setMonth(nextMonth.getMonth() + 1);
-                                return d.getMonth() === nextMonth.getMonth() && d.getFullYear() === nextMonth.getFullYear();
-                            }
-                            if (period === 'MONTH') {
-                                const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
-                                const targetY = response.data.targetYear || today.getFullYear();
-                                return d.getMonth() === targetM && d.getFullYear() === targetY;
-                            }
-                            return true;
-                        });
+                        // NEW LOGIC: Handle Pending (Overdue vs Upcoming)
+                        if (status === 'PENDING' && period === 'MONTH' && type) {
+                            const pendingRecords = await DataManager.getPendingFinancialRecords(type.toLowerCase());
+                            console.log('[DEBUG] Pending Records Found:', pendingRecords.length, pendingRecords);
 
-                        const typeFilter = filter ? filter.toLowerCase() : null;
-                        const finalRecords = typeFilter ? filtered.filter(r => r.type === typeFilter) : filtered;
+                            const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
+                            const targetY = response.data.targetYear || today.getFullYear();
+                            const lastDayOfMonth = new Date(targetY, targetM + 1, 0);
 
-                        const total = finalRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+                            let overdueSum = 0;
+                            let upcomingSum = 0;
 
-                        const label = typeFilter === 'income' ? 'Ganhos' : typeFilter === 'expense' ? 'Gastos' : 'Total';
-                        const periodLabel = period === 'TODAY' ? 'de hoje' : period === 'TOMORROW' ? 'de amanhã' : period === 'NEXT_MONTH' ? 'do mês que vem' : period === 'MONTH' ? 'deste mês' : 'total';
-                        addMessage('assistant', `${label} ${periodLabel}: R$ ${total.toFixed(2)}`, 'text');
+                            pendingRecords.forEach(r => {
+                                if (!r.due_date) {
+                                    console.log('[DEBUG] Record skipped: No due_date', r);
+                                    return;
+                                }
+
+                                let dateStr = r.due_date;
+                                // If it looks like a date-only string (YYYY-MM-DD), append time to avoid timezone issues
+                                if (dateStr.length === 10 && !dateStr.includes('T')) {
+                                    dateStr += 'T12:00:00';
+                                }
+
+                                const dueDate = new Date(dateStr);
+
+                                if (isNaN(dueDate.getTime())) {
+                                    console.error(`[DEBUG] Invalid Date encountered: ${r.due_date} (parsed as ${dateStr})`);
+                                    return;
+                                }
+
+                                console.log(`[DEBUG] Processing Record: ${r.description} | Due: ${r.due_date} | Parsed: ${dueDate.toISOString()} | Amount: ${r.amount}`);
+                                console.log(`[DEBUG] Comparison: < Today(${today.toISOString()})? ${dueDate < today} | <= LastDay(${lastDayOfMonth.toISOString()})? ${dueDate <= lastDayOfMonth}`);
+
+                                if (dueDate < today) {
+                                    overdueSum += Number(r.amount);
+                                    console.log(`[DEBUG] Added to Overdue. New Sum: ${overdueSum}`);
+                                } else if (dueDate <= lastDayOfMonth) {
+                                    upcomingSum += Number(r.amount);
+                                    console.log(`[DEBUG] Added to Upcoming. New Sum: ${upcomingSum}`);
+                                } else {
+                                    console.log('[DEBUG] Record outside current month range.');
+                                }
+                            });
+
+                            const total = overdueSum + upcomingSum;
+                            const typeLabel = type.toLowerCase() === 'income' ? 'receber' : 'pagar';
+
+                            let msg = '';
+                            if (total === 0) {
+                                msg = `Não encontrei contas a ${typeLabel} para este mês.`;
+                            } else {
+                                msg = `Para este mês, você tem um total de R$ ${total.toFixed(2)} a ${typeLabel}.`;
+                                if (overdueSum > 0 && upcomingSum > 0) {
+                                    msg += ` Sendo R$ ${overdueSum.toFixed(2)} já vencidos e R$ ${upcomingSum.toFixed(2)} que ainda vão vencer.`;
+                                } else if (overdueSum > 0) {
+                                    msg += ` Atenção: Todo esse valor (R$ ${overdueSum.toFixed(2)}) já está vencido.`;
+                                } else {
+                                    msg += ` Todo esse valor ainda vai vencer.`;
+                                }
+                            }
+
+                            addMessage('assistant', msg, 'success');
+                        } else {
+                            // EXISTING LOGIC (Summary of created_at records - usually for "Paid" or "History")
+                            const records = await DataManager.getFinancialSummary();
+                            const filtered = records.filter(r => {
+                                const d = new Date(r.created_at);
+                                if (period === 'TODAY') return d.toDateString() === today.toDateString();
+                                if (period === 'TOMORROW') {
+                                    const tomorrow = new Date(today);
+                                    tomorrow.setDate(tomorrow.getDate() + 1);
+                                    return d.toDateString() === tomorrow.toDateString();
+                                }
+                                if (period === 'NEXT_MONTH') {
+                                    const nextMonth = new Date(today);
+                                    nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                    return d.getMonth() === nextMonth.getMonth() && d.getFullYear() === nextMonth.getFullYear();
+                                }
+                                if (period === 'MONTH') {
+                                    const targetM = response.data.targetMonth ? response.data.targetMonth - 1 : today.getMonth();
+                                    const targetY = response.data.targetYear || today.getFullYear();
+                                    return d.getMonth() === targetM && d.getFullYear() === targetY;
+                                }
+                                if (period === 'SPECIFIC_DATE' && response.data.targetDate) {
+                                    const targetDateStr = response.data.targetDate;
+                                    const dStr = d.toISOString().split('T')[0];
+                                    return dStr === targetDateStr;
+                                }
+                                return true;
+                            });
+
+                            const typeFilter = (type || filter) ? (type || filter).toLowerCase() : null;
+                            const finalRecords = typeFilter ? filtered.filter(r => r.type === typeFilter) : filtered;
+
+                            const statusFilter = status ? status.toLowerCase() : null;
+                            const statusFiltered = statusFilter ? finalRecords.filter(r => r.status === statusFilter) : finalRecords;
+
+                            const total = statusFiltered.reduce((sum, r) => sum + Number(r.amount), 0);
+
+                            const label = typeFilter === 'income' ? 'Ganhos' : typeFilter === 'expense' ? 'Gastos' : 'Total';
+                            const periodLabel = period === 'TODAY' ? 'de hoje' : period === 'TOMORROW' ? 'de amanhã' : period === 'NEXT_MONTH' ? 'do mês que vem' : period === 'MONTH' ? 'deste mês' : 'total';
+
+                            if (status === 'PAID') {
+                                addMessage('assistant', `${label} pagos ${periodLabel}: R$ ${total.toFixed(2)}`, 'success');
+                            } else {
+                                addMessage('assistant', `${label} ${periodLabel}: R$ ${total.toFixed(2)}`, 'success');
+                            }
+                        }
                     }
                     else if (entity === 'CLIENT' && metric === 'BEST') {
                         const records = await DataManager.getFinancialSummary();
@@ -1097,9 +1327,9 @@ export default function CommandCenter() {
                         });
 
                         if (bestClient) {
-                            addMessage('assistant', `Melhor cliente (baseado nos últimos registros): ${bestClient} (R$ ${maxAmount.toFixed(2)})`, 'text');
+                            addMessage('assistant', `Melhor cliente (baseado nos últimos registros): ${bestClient} (R$ ${maxAmount.toFixed(2)})`, 'success');
                         } else {
-                            addMessage('assistant', "Não tenho dados suficientes para determinar o melhor cliente.", 'text');
+                            addMessage('assistant', "Não tenho dados suficientes para determinar o melhor cliente.", 'success');
                         }
                     }
                     break;
@@ -1113,42 +1343,6 @@ export default function CommandCenter() {
 
                 case 'RISKY_ACTION':
                     addMessage('assistant', response.message, 'text');
-                    break;
-
-                case 'CANCEL_APPOINTMENT':
-                    if (response.data?.clientName) {
-                        const clients = await DataManager.getClients();
-                        const client = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
-
-                        if (client) {
-                            const nextApp = await DataManager.findNextAppointment(client.id);
-                            if (nextApp) {
-                                const date = new Date(nextApp.date_time).toLocaleString();
-                                // We use CONFIRMATION_REQUIRED flow manually here
-                                addMessage('assistant', `Encontrei um agendamento para ${client.name} em ${date} (${nextApp.description}). Deseja cancelar?`);
-                                setConversationState({
-                                    type: 'CONFIRM_ACTION',
-                                    data: {
-                                        originalIntent: {
-                                            intent: 'CANCEL_APPOINTMENT',
-                                            data: { appointmentId: nextApp.id, description: nextApp.description }
-                                        }
-                                    }
-                                });
-                            } else {
-                                addMessage('assistant', `Não encontrei nenhum agendamento futuro para ${client.name}.`, 'error');
-                            }
-                        } else {
-                            addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}".`, 'error');
-                        }
-                    }
-                    break;
-
-                case 'UNSUPPORTED_FEATURE':
-                    addMessage('assistant', response.message, 'text');
-                    if (response.spokenMessage) {
-                        await playAudioWithCache(response.spokenMessage, response.audio, currentInputType);
-                    }
                     break;
 
                 default:

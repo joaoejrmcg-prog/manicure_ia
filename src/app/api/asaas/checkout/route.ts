@@ -52,6 +52,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
         }
 
+        // 2.5 Validate CPF is present (required for PIX and Boleto)
+        if (!profile.cpf) {
+            return NextResponse.json({
+                error: 'CPF é obrigatório para criar assinatura',
+                code: 'CPF_REQUIRED'
+            }, { status: 400 });
+        }
+
         // 3. Create/Get Asaas Customer
         let asaasCustomerId = profile.asaas_customer_id;
 
@@ -61,7 +69,7 @@ export async function POST(req: NextRequest) {
                 name: profile.name || user.email || 'Cliente',
                 email: user.email!,
                 mobilePhone: profile.whatsapp,
-                cpfCnpj: profile.cpf || '24971563792', // Test CPF if not provided
+                cpfCnpj: profile.cpf, // CPF validated above
                 externalReference: user.id
             });
             asaasCustomerId = newCustomer.id;
@@ -73,22 +81,6 @@ export async function POST(req: NextRequest) {
                 .eq('user_id', user.id);
         } else {
             console.log('Reusing existing Asaas customer:', asaasCustomerId);
-            // Update existing customer with CPF if needed
-            try {
-                await fetch(`${process.env.ASAAS_API_URL}/customers/${asaasCustomerId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'access_token': process.env.ASAAS_API_KEY!
-                    },
-                    body: JSON.stringify({
-                        cpfCnpj: profile.cpf || '24971563792'
-                    })
-                });
-                console.log('Updated customer with CPF');
-            } catch (err) {
-                console.error('Error updating customer:', err);
-            }
         }
 
         // 4. Create Subscription

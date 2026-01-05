@@ -5,6 +5,9 @@ import { supabase } from "../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, ArrowRight } from "lucide-react";
 import { getURL } from "../lib/utils";
+import { useBiometricAuth } from "@/hooks/useBiometricAuth";
+import BiometricPrompt from "../components/BiometricPrompt";
+import BiometricSetupPrompt from "../components/BiometricSetupPrompt";
 
 function LoginForm() {
     const [email, setEmail] = useState("");
@@ -16,6 +19,18 @@ function LoginForm() {
     const referralCode = searchParams.get('ref');
     const [mode, setMode] = useState<'login' | 'signup'>(referralCode ? 'signup' : 'login');
     const router = useRouter();
+
+    // Biometric states
+    const { isSupported, isEnrolled, isLoading: biometricLoading, registerBiometric, authenticateBiometric } = useBiometricAuth();
+    const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+    const [showBiometricSetup, setShowBiometricSetup] = useState(false);
+
+    // Check for biometric on mount
+    useEffect(() => {
+        if (isEnrolled && mode === 'login') {
+            setShowBiometricPrompt(true);
+        }
+    }, [isEnrolled, mode]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,8 +62,15 @@ function LoginForm() {
                     password,
                 });
                 if (error) throw error;
-                router.refresh();
-                router.push("/");
+
+                // After successful login, offer biometric setup if supported and not enrolled
+                if (isSupported && !isEnrolled) {
+                    setShowBiometricSetup(true);
+                    // Don't redirect yet, wait for user decision
+                } else {
+                    router.refresh();
+                    router.push("/");
+                }
             }
         } catch (err: any) {
             console.error(err);
@@ -60,6 +82,68 @@ function LoginForm() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleBiometricLogin = async () => {
+        try {
+            const authData = await authenticateBiometric();
+
+            if (authData) {
+                const { email, refreshToken } = authData;
+
+                if (refreshToken) {
+                    // Restaurar sessão com refreshToken
+                    const { error } = await supabase.auth.setSession({
+                        access_token: '', // Será renovado pelo refresh
+                        refresh_token: refreshToken
+                    });
+
+                    if (!error) {
+                        // Login automático bem-sucedido!
+                        router.refresh();
+                        router.push("/");
+                        return;
+                    }
+                }
+
+                // Fallback: preencher email e pedir senha
+                setEmail(email);
+                setShowBiometricPrompt(false);
+                alert('Biometria verificada! Digite sua senha para continuar.');
+            } else {
+                setError('Falha na autenticação biométrica');
+            }
+        } catch (err) {
+            console.error('Biometric error:', err);
+            setError('Erro ao usar biometria');
+            setShowBiometricPrompt(false);
+        }
+    };
+
+    const handleSetupBiometric = async () => {
+        // Obter refresh token da sessão atual do Supabase
+        const { data: { session } } = await supabase.auth.getSession();
+        const refreshToken = session?.refresh_token;
+
+        const success = await registerBiometric(email, refreshToken);
+
+        if (success) {
+            setShowBiometricSetup(false);
+            alert('✅ Biometria ativada com sucesso!');
+            router.refresh();
+            router.push("/");
+        } else {
+            alert('Não foi possível ativar a biometria');
+            setShowBiometricSetup(false);
+            router.refresh();
+            router.push("/");
+        }
+    };
+
+    const handleSkipBiometric = () => {
+        setShowBiometricSetup(false);
+        router.refresh();
+        router.push("/");
     };
 
     return (
@@ -169,6 +253,21 @@ function LoginForm() {
                     &copy; 2025 Meu Negócio. Gestão Inteligente.
                 </p>
             </div>
+
+            {/* Biometric Prompts */}
+            <BiometricPrompt
+                isOpen={showBiometricPrompt}
+                isLoading={biometricLoading}
+                onAuthenticate={handleBiometricLogin}
+                onCancel={() => setShowBiometricPrompt(false)}
+            />
+
+            <BiometricSetupPrompt
+                isOpen={showBiometricSetup}
+                isLoading={biometricLoading}
+                onSetup={handleSetupBiometric}
+                onSkip={handleSkipBiometric}
+            />
         </div>
     );
 }

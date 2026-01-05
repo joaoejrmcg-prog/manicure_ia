@@ -124,6 +124,7 @@ export default function TermsModal() {
                         <ul className="list-disc pl-5 space-y-1">
                             <li>Cada conta é pessoal e intransferível.</li>
                             <li>O usuário é responsável por manter suas informações corretas e atualizadas.</li>
+                            <li>Para criar uma assinatura, é necessário fornecer um CPF válido. O CPF informado será vinculado permanentemente à conta e não poderá ser alterado após a confirmação.</li>
                             <li>O acesso ao aplicativo depende do status da assinatura, e não apenas do login.</li>
                             <li>A criação de múltiplas contas com a finalidade de obter vantagens indevidas (como uso repetido de período gratuito) pode resultar na limitação ou suspensão de benefícios promocionais, sem prejuízo do acesso mediante pagamento.</li>
                         </ul>
@@ -143,12 +144,21 @@ export default function TermsModal() {
                         <h4 className="font-bold text-gray-800 mb-2">5. Assinatura, pagamentos e cobranças</h4>
 
                         <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.1 Forma de pagamento</h5>
-                        <p>Os pagamentos são realizados por meios eletrônicos disponibilizados no aplicativo, como Pix ou boleto, por intermédio de plataforma de pagamento terceirizada. A confirmação do pagamento pode levar algum tempo, de acordo com o meio utilizado.</p>
+                        <p>Os pagamentos são realizados por meios eletrônicos disponibilizados no aplicativo, como Pix, boleto ou cartão de crédito, por intermédio de plataforma de pagamento terceirizada. A confirmação do pagamento pode levar algum tempo, de acordo com o meio utilizado.</p>
+                        <ul className="list-disc pl-5 space-y-1 mt-2">
+                            <li><strong>Pix e Boleto:</strong> Pagamento mensal avulso. É necessário realizar um novo pagamento a cada mês.</li>
+                            <li><strong>Cartão de Crédito:</strong> Assinatura recorrente. O pagamento é renovado automaticamente todo mês até o cancelamento.</li>
+                        </ul>
 
-                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.2 Pagamento antecipado</h5>
+                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.2 Ciclo de cobrança</h5>
+                        <p>As assinaturas têm ciclo mensal. O vencimento ocorre sempre no mesmo dia do mês em que a assinatura foi contratada.</p>
+                        <p className="mt-2"><strong>Exemplo:</strong> Se a assinatura for criada no dia 5 de janeiro, os próximos vencimentos serão nos dias 5 de fevereiro, 5 de março, e assim sucessivamente.</p>
+                        <p className="mt-2 text-xs text-gray-500">Nota: Para meses com menos dias que a data de vencimento (ex: assinatura criada em 31/jan), o vencimento será ajustado para o último dia do mês.</p>
+
+                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.3 Pagamento antecipado</h5>
                         <p>Quando o pagamento é realizado antes da data de vencimento, o período de acesso é estendido automaticamente, sem perda de dias.</p>
 
-                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.3 Pagamento após o vencimento</h5>
+                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.4 Pagamento após o vencimento</h5>
                         <p>Caso o pagamento não seja realizado até a data de vencimento:</p>
                         <ul className="list-disc pl-5 space-y-1 mt-1">
                             <li>O acesso ao aplicativo poderá ser parcialmente limitado, afetando algumas funcionalidades.</li>
@@ -160,7 +170,7 @@ export default function TermsModal() {
                             <li>O novo período de uso passa a contar a partir da data do pagamento, sem desconto dos dias em que o acesso esteve limitado.</li>
                         </ul>
 
-                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.4 Pagamento duplicado</h5>
+                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.5 Pagamento duplicado</h5>
                         <p>Caso o usuário realize pagamentos duplicados de forma não intencional:</p>
                         <ul className="list-disc pl-5 space-y-1 mt-1">
                             <li>O valor excedente será convertido em saldo a favor.</li>
@@ -168,7 +178,7 @@ export default function TermsModal() {
                             <li>Não há necessidade de solicitação manual para esse ajuste.</li>
                         </ul>
 
-                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.5 Inadimplência</h5>
+                        <h5 className="font-semibold text-gray-700 mt-3 mb-1">5.6 Inadimplência</h5>
                         <p>O não pagamento da assinatura pode resultar em restrição progressiva de funcionalidades, conforme o tempo de atraso. A empresa não aplica multas ou cobranças adicionais além do valor da assinatura vigente.</p>
                     </section>
 

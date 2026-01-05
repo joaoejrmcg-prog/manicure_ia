@@ -6,6 +6,7 @@ import { Calendar, Zap, CreditCard, FileText, Loader2, Clock } from "lucide-reac
 import { createBrowserClient } from '@supabase/ssr';
 import SubscriptionBadge from "./SubscriptionBadge";
 import CancelSubscription from "../perfil/CancelSubscription";
+import CpfInputModal from "./CpfInputModal";
 
 import { plansData } from "../utils/plans";
 
@@ -18,8 +19,10 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
     const [isLoading, setIsLoading] = useState(false);
     const [invoices, setInvoices] = useState<any[]>([]);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showCpfModal, setShowCpfModal] = useState(false);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+    const [pendingBillingType, setPendingBillingType] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD' | null>(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -160,6 +163,18 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
 
             const data = await response.json();
 
+            console.log('[DEBUG] Response status:', response.ok);
+            console.log('[DEBUG] Response data:', data);
+
+            // Check if CPF is required
+            if (!response.ok && data.code === 'CPF_REQUIRED') {
+                console.log('[CPF] CPF required, opening modal...');
+                setPendingBillingType(billingType);
+                setShowCpfModal(true);
+                setIsLoading(false);
+                return;
+            }
+
             if (response.ok && data.success && data.paymentUrl) {
                 window.location.href = data.paymentUrl;
             } else {
@@ -177,6 +192,18 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
         }
     };
 
+    const handleCpfSuccess = (cpf: string) => {
+        console.log('[CPF] CPF saved successfully:', cpf);
+        setShowCpfModal(false);
+
+        // Retry payment with the pending billing type
+        if (pendingBillingType) {
+            console.log('[CPF] Retrying payment with', pendingBillingType);
+            handleConfirmPayment(pendingBillingType);
+            setPendingBillingType(null);
+        }
+    };
+
     return (
         <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 mb-4">
             <div className="flex items-center justify-between mb-4">
@@ -186,7 +213,8 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                 {profile.plan === 'trial' && invoices.length === 0 && (
                     <button
                         onClick={handleSubscribe}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-green-900/20"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-green-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Assinar Agora
                     </button>
@@ -196,7 +224,8 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                 {(profile.plan === 'light' || profile.plan === 'pro') && invoices.length === 0 && (
                     <button
                         onClick={handleRenew}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Pagar Mensalidade
                     </button>
@@ -334,35 +363,53 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                         <div className="space-y-3">
                             <button
                                 onClick={() => handleConfirmPayment('PIX')}
-                                className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                disabled={isLoading}
+                                className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">💠</span>
-                                    <span className="font-medium text-white">Pix</span>
+                                <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">💠</span>
+                                        <div className="text-left">
+                                            <span className="font-medium text-white block">Pix</span>
+                                            <span className="text-xs text-neutral-500">Pagamento mensal avulso</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-neutral-500 group-hover:text-white">→</span>
                                 </div>
-                                <span className="text-neutral-500 group-hover:text-white">→</span>
                             </button>
 
                             <button
                                 onClick={() => handleConfirmPayment('BOLETO')}
-                                className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                disabled={isLoading}
+                                className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">📄</span>
-                                    <span className="font-medium text-white">Boleto Bancário</span>
+                                <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">📄</span>
+                                        <div className="text-left">
+                                            <span className="font-medium text-white block">Boleto Bancário</span>
+                                            <span className="text-xs text-neutral-500">Pagamento mensal avulso</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-neutral-500 group-hover:text-white">→</span>
                                 </div>
-                                <span className="text-neutral-500 group-hover:text-white">→</span>
                             </button>
 
                             <button
                                 onClick={() => handleConfirmPayment('CREDIT_CARD')}
-                                className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg flex items-center justify-between transition-colors group"
+                                disabled={isLoading}
+                                className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">💳</span>
-                                    <span className="font-medium text-white">Cartão de Crédito</span>
+                                <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">💳</span>
+                                        <div className="text-left">
+                                            <span className="font-medium text-white block">Cartão de Crédito</span>
+                                            <span className="text-xs text-neutral-500">Assinatura recorrente</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-neutral-500 group-hover:text-white">→</span>
                                 </div>
-                                <span className="text-neutral-500 group-hover:text-white">→</span>
                             </button>
                         </div>
 
@@ -375,6 +422,13 @@ export default function SubscriptionManager({ profile, subscription }: Subscript
                     </div>
                 </div>
             )}
+
+            {/* CPF Input Modal */}
+            <CpfInputModal
+                isOpen={showCpfModal}
+                onClose={() => setShowCpfModal(false)}
+                onSuccess={handleCpfSuccess}
+            />
         </div>
     );
 }

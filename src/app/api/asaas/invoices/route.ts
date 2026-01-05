@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
                     console.log(`[SYNC] Updating subscription ${subscription.id} to ACTIVE based on Asaas status.`);
 
                     const nextDue = new Date(asaasSub.nextDueDate);
+                    // Adjust to end of day to prevent timezone issues (e.g. 2026-02-02T00:00:00Z -> 2026-02-01T21:00:00 -03:00)
+                    nextDue.setUTCHours(23, 59, 59, 999);
 
                     const { error: updateError } = await supabaseAdmin
                         .from('subscriptions')
