@@ -127,7 +127,15 @@ function LoginForm() {
     const handleSetupBiometric = async () => {
         // Obter refresh token da sessão atual do Supabase
         const { data: { session } } = await supabase.auth.getSession();
+        console.log('[BIOMETRIC] Setup - Session:', !!session, 'Has Token:', !!session?.refresh_token);
+
         const refreshToken = session?.refresh_token;
+
+        if (!refreshToken) {
+            console.error('[BIOMETRIC] Cannot setup: No refresh token available');
+            alert('Erro ao configurar biometria: Sessão inválida. Tente fazer login novamente.');
+            return;
+        }
 
         const success = await registerBiometric(email, refreshToken);
 
@@ -265,6 +273,15 @@ function LoginForm() {
                 onSetup={handleSetupBiometric}
                 onSkip={handleSkipBiometric}
             />
+
+            {/* DEBUG PANEL - REMOVE BEFORE PRODUCTION */}
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-green-400 text-[10px] p-2 font-mono max-h-32 overflow-y-auto z-50 pointer-events-none">
+                <p>Status Biometria:</p>
+                <p>Suportado: {isSupported ? 'SIM' : 'NÃO'}</p>
+                <p>Cadastrado: {isEnrolled ? 'SIM' : 'NÃO'}</p>
+                <p>Token Salvo: {typeof window !== 'undefined' && localStorage.getItem('biometric_refresh_token') ? 'SIM' : 'NÃO'}</p>
+                <p>Email Salvo: {typeof window !== 'undefined' && localStorage.getItem('biometric_email') || 'Nenhum'}</p>
+            </div>
         </div>
     );
 }
