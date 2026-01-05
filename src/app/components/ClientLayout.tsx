@@ -44,6 +44,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 }
             } else if (session) {
                 setIsAuthenticated(true);
+
+                // Keep biometric token fresh
+                if (typeof window !== 'undefined' && localStorage.getItem('biometric_enrolled') === 'true' && session.refresh_token) {
+                    localStorage.setItem('biometric_refresh_token', session.refresh_token);
+                    if (session.user.email) {
+                        localStorage.setItem('biometric_email', session.user.email);
+                    }
+                }
             }
         });
 
