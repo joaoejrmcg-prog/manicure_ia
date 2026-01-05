@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, ArrowRight } from "lucide-react";
@@ -24,11 +24,13 @@ function LoginForm() {
     const { isSupported, isEnrolled, isLoading: biometricLoading, registerBiometric, authenticateBiometric } = useBiometricAuth();
     const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
     const [showBiometricSetup, setShowBiometricSetup] = useState(false);
+    const biometricPromptShown = useRef(false);
 
-    // Check for biometric on mount
+    // Check for biometric on mount - ONLY ONCE
     useEffect(() => {
-        if (isEnrolled && mode === 'login') {
+        if (isEnrolled && mode === 'login' && !biometricPromptShown.current) {
             setShowBiometricPrompt(true);
+            biometricPromptShown.current = true;
         }
     }, [isEnrolled, mode]);
 
