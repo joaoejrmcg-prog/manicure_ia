@@ -42,8 +42,8 @@ function LoginForm() {
                         try {
                             console.log('[BIOMETRIC] Attempting automatic login with refresh token...');
 
-                            const { data, error } = await supabase.auth.setSession({
-                                access_token: refreshToken,
+                            // Use refreshSession() to get new access token from refresh token
+                            const { data, error } = await supabase.auth.refreshSession({
                                 refresh_token: refreshToken
                             });
 
@@ -51,8 +51,8 @@ function LoginForm() {
 
                             if (data.session) {
                                 console.log('[BIOMETRIC] ✅ Automatic login successful!');
-                                router.refresh();
-                                router.push("/");
+                                // Navigate immediately without waiting
+                                window.location.href = '/';
                                 return;
                             }
                         } catch (error: any) {
@@ -70,7 +70,7 @@ function LoginForm() {
         };
 
         tryBiometricLogin();
-    }, [isEnrolled, mode, authenticateBiometric, router]);
+    }, [isEnrolled, mode, authenticateBiometric]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
