@@ -14,37 +14,29 @@ export const performLogout = async (router: AppRouterInstance) => {
     if (hasBiometrics) {
         console.log('[AUTH] Performing Soft Logout for Biometric User');
 
-        // Soft Logout: Limpa apenas sessão local do Supabase
-        // Isso preserva o refresh token no servidor para ser usado pela biometria depois
+        // 1. Salvar dados biométricos
+        const biometricData = {
+            credential: localStorage.getItem('biometric_credential'),
+            email: localStorage.getItem('biometric_email'),
+            refreshToken: localStorage.getItem('biometric_refresh_token'),
+            enrolled: localStorage.getItem('biometric_enrolled')
+        };
 
-        // 1. Identificar chaves do Supabase no localStorage
-        // O padrão é `sb-<project-ref>-auth-token`
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                keysToRemove.push(key);
-            }
-        }
+        // 2. Limpar TUDO do localStorage (garante que sessão do Supabase morra)
+        localStorage.clear();
 
-        // 2. Remover chaves de sessão
-        keysToRemove.forEach(key => localStorage.removeItem(key));
+        // 3. Restaurar dados biométricos
+        if (biometricData.credential) localStorage.setItem('biometric_credential', biometricData.credential);
+        if (biometricData.email) localStorage.setItem('biometric_email', biometricData.email);
+        if (biometricData.refreshToken) localStorage.setItem('biometric_refresh_token', biometricData.refreshToken);
+        if (biometricData.enrolled) localStorage.setItem('biometric_enrolled', biometricData.enrolled);
 
-        // 3. Forçar redirecionamento e refresh para limpar estado da memória
-        if (typeof window !== 'undefined') {
-            sessionStorage.setItem('justLoggedOut', 'true');
-        }
-        router.push('/login');
+        // 4. Redirecionar com flag na URL (mais robusto que sessionStorage)
+        router.push('/login?logged_out=true');
         router.refresh();
-
-        // Pequeno delay para garantir que a UI atualize
-        setTimeout(() => {
-            window.location.href = '/login';
-        }, 100);
 
     } else {
         console.log('[AUTH] Performing Hard Logout');
-        // Hard Logout: Invalida token no servidor
         await supabase.auth.signOut();
         router.push('/login');
     }

@@ -27,12 +27,12 @@ function LoginForm() {
     // Auto-trigger biometric authentication when enrolled
     useEffect(() => {
         const tryBiometricLogin = async () => {
-            // Check if user just logged out
-            const justLoggedOut = typeof window !== 'undefined' && sessionStorage.getItem('justLoggedOut') === 'true';
+            // Check if user just logged out via URL param
+            const justLoggedOut = searchParams.get('logged_out') === 'true';
 
             if (justLoggedOut) {
                 console.log('[BIOMETRIC] Auto-trigger skipped: User just logged out');
-                sessionStorage.removeItem('justLoggedOut'); // Clear flag for next time
+                // Remove param from URL cleanly without refresh if possible, or just ignore
                 return;
             }
 
