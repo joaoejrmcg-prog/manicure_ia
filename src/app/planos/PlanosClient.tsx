@@ -217,13 +217,13 @@ export default function PlanosClient({ currentPlan }: PlanosClientProps) {
                 <div className="grid md:grid-cols-2 gap-6 mb-8">
                     {plansData.map((plan) => (
                         <PlanCard
-                            key={plan.name}
+                            key={plan.id}
                             name={plan.name}
                             price={plan.price}
                             features={plan.features}
-                            isCurrentPlan={currentPlan.toUpperCase() === plan.name}
+                            isCurrentPlan={currentPlan.toLowerCase() === plan.id}
                             isMostPopular={plan.isMostPopular}
-                            onSelect={() => handleInitiateCheckout(plan.name)}
+                            onSelect={() => handleInitiateCheckout(plan.id)}
                         />
                     ))}
                 </div>

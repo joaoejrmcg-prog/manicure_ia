@@ -43,6 +43,16 @@ export function useSpeechRecognition() {
 
             setRecognition(recognitionInstance);
             setState(prev => ({ ...prev, isSupported: true }));
+
+            return () => {
+                if (recognitionInstance) {
+                    recognitionInstance.abort();
+                    recognitionInstance.onend = null;
+                    recognitionInstance.onresult = null;
+                    recognitionInstance.onerror = null;
+                    recognitionInstance.onstart = null;
+                }
+            };
         } else {
             setState(prev => ({ ...prev, isSupported: false, error: 'Reconhecimento de voz não suportado neste navegador.' }));
         }

@@ -225,6 +225,20 @@ export async function POST(req: NextRequest) {
 
             if (shouldUpdateDB) {
                 console.log('[CHECKOUT] Updating DB subscription status/plan...');
+
+                // CRITICAL FIX: If we created a NEW subscription (ID changed), we MUST cancel the old one
+                // to avoid duplicate charges in Asaas (especially for Pending -> Pending retries).
+                if (subscription.id !== existingSub.asaas_subscription_id) {
+                    console.log('[CHECKOUT] Subscription ID changed (Pending/Upgrade). Cancelling old Asaas subscription:', existingSub.asaas_subscription_id);
+                    try {
+                        const { cancelAsaasSubscription } = await import('@/lib/asaas');
+                        await cancelAsaasSubscription(existingSub.asaas_subscription_id);
+                        console.log('[CHECKOUT] Old subscription cancelled successfully.');
+                    } catch (cancelError) {
+                        console.error('[CHECKOUT] Failed to cancel old subscription:', cancelError);
+                    }
+                }
+
                 const { error: updateError } = await supabaseAdmin
                     .from('subscriptions')
                     .update({

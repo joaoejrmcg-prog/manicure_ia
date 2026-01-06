@@ -65,7 +65,9 @@ export async function POST(req: NextRequest) {
                     if (currentSub && currentSub.asaas_subscription_id) {
                         // 2. Update Asaas Subscription Value
                         const { updateAsaasSubscription } = await import('@/lib/asaas');
-                        const PLANS = { 'light': 19.90, 'pro': 39.90 };
+                        const { PLAN_LIGHT, PLAN_PRO, PLAN_LIGHT_PRICE, PLAN_PRO_PRICE } = await import('@/app/utils/plans');
+
+                        const PLANS = { [PLAN_LIGHT]: PLAN_LIGHT_PRICE, [PLAN_PRO]: PLAN_PRO_PRICE };
                         const newValue = PLANS[newPlan as keyof typeof PLANS];
 
                         if (newValue) {
@@ -99,12 +101,10 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ received: true });
             }
 
-            const subscriptionId = payment.subscription;
-
             // 1. Fetch current subscription to determine base date
             const { data: currentSub, error: fetchError } = await supabaseAdmin
                 .from('subscriptions')
-                .select('current_period_end, status')
+                .select('current_period_end, status, user_id, plan')
                 .eq('asaas_subscription_id', subscriptionId)
                 .single();
 
@@ -113,32 +113,57 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ received: true, warning: 'Subscription not found' });
             }
 
+            // Determine plan based on payment value
+            const { PLAN_LIGHT, PLAN_PRO, PLAN_LIGHT_PRICE, PLAN_PRO_PRICE, getPlanPrice } = await import('@/app/utils/plans');
+
+            let planName = undefined;
+            if (payment.value) {
+                if (payment.value === PLAN_LIGHT_PRICE) planName = PLAN_LIGHT;
+                else if (payment.value === PLAN_PRO_PRICE) planName = PLAN_PRO;
+            }
+
             // 2. Calculate new period end
             // Logic: New End = MAX(Current End, Now) + 1 Month
             const now = new Date();
             const currentEnd = currentSub.current_period_end ? new Date(currentSub.current_period_end) : new Date(0);
 
             // If subscription is expired (end < now), start from now. If active (end > now), start from end.
-            const baseDate = currentEnd > now ? currentEnd : now;
+            let baseDate = currentEnd > now ? currentEnd : now;
+            let extraDays = 0;
+
+            // FIX: If Plan Changed (Upgrade/Downgrade via manual payment), calculate CREDIT EXTENSION.
+            // Instead of just resetting to NOW, we convert unused days of the old plan into extra days of the new plan.
+            if (planName && currentSub.plan && planName !== currentSub.plan) {
+                console.log(`[WEBHOOK] Plan change detected (${currentSub.plan} -> ${planName}). Calculating credit extension...`);
+
+                // 1. Calculate unused days of old plan
+                const oldPlanPrice = getPlanPrice(currentSub.plan);
+                const newPlanPrice = getPlanPrice(planName);
+
+                if (oldPlanPrice > 0 && newPlanPrice > 0 && currentEnd > now) {
+                    const diffTime = currentEnd.getTime() - now.getTime();
+                    const unusedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    // 2. Calculate unused value (Credit)
+                    const oldDailyRate = oldPlanPrice / 30;
+                    const credit = unusedDays * oldDailyRate;
+
+                    // 3. Convert credit to days of new plan
+                    const newDailyRate = newPlanPrice / 30;
+                    extraDays = Math.floor(credit / newDailyRate);
+
+                    console.log(`[WEBHOOK] Credit Extension: Unused Days: ${unusedDays} (${currentSub.plan}). Credit: R$ ${credit.toFixed(2)}. New Daily Rate: R$ ${newDailyRate.toFixed(2)}. Extra Days: ${extraDays}`);
+                }
+
+                // Reset base date to NOW for the new cycle, but we will add extraDays later
+                baseDate = now;
+            }
 
             const newPeriodEnd = new Date(baseDate);
-            newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1);
+            newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1); // Add standard 1 month
+            newPeriodEnd.setDate(newPeriodEnd.getDate() + extraDays); // Add credit extension days
 
-            console.log('--- WEBHOOK DATE DEBUG ---');
-            console.log('Now:', now.toISOString());
-            console.log('Current End (DB):', currentEnd.toISOString());
-            console.log('Base Date (Selected):', baseDate.toISOString());
-            console.log('New Period End (Calculated):', newPeriodEnd.toISOString());
-            console.log('--------------------------');
-
-            console.log(`[WEBHOOK] Extending subscription. Base: ${baseDate.toISOString()}, New End: ${newPeriodEnd.toISOString()}`);
-
-            // Determine plan based on payment value
-            let planName = undefined;
-            if (payment.value) {
-                if (payment.value === 19.90) planName = 'light';
-                else if (payment.value === 39.90) planName = 'pro';
-            }
+            console.log(`[WEBHOOK] Final Period End: ${newPeriodEnd.toISOString()} (Base: ${baseDate.toISOString()} + 1 Month + ${extraDays} Extra Days)`);
 
             // 3. Update subscription
             const updateData: any = {
@@ -161,6 +186,21 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
             }
             console.log('Subscription updated successfully.');
+
+            // 4. Process Referral Reward (Fire and Forget)
+            try {
+                let userIdForReferral = currentSub?.user_id;
+
+                if (userIdForReferral) {
+                    const { processReferralRewardAdmin } = await import('@/app/lib/referral-service');
+                    await processReferralRewardAdmin(supabaseAdmin, userIdForReferral);
+                } else {
+                    console.warn('[WEBHOOK] Could not find user_id for referral processing.');
+                }
+            } catch (referralError) {
+                console.error('[WEBHOOK] Error processing referral reward:', referralError);
+            }
+
         } else if (event === 'PAYMENT_OVERDUE') {
             await supabaseAdmin
                 .from('subscriptions')
