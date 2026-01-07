@@ -201,11 +201,68 @@ export async function POST(req: NextRequest) {
                 console.error('[WEBHOOK] Error processing referral reward:', referralError);
             }
 
+            // 5. Create success notification for user
+            if (currentSub?.user_id) {
+                const valueFormatted = payment.value ? `R$ ${payment.value.toFixed(2).replace('.', ',')}` : '';
+                await supabaseAdmin
+                    .from('notifications')
+                    .insert({
+                        user_id: currentSub.user_id,
+                        title: '✅ Pagamento Confirmado',
+                        message: `Seu pagamento ${valueFormatted} foi processado com sucesso. Obrigado!`,
+                        type: 'success'
+                    });
+                console.log(`[WEBHOOK] Payment success notification created for user ${currentSub.user_id}`);
+            }
+
+        } else if (event === 'PAYMENT_CREATED') {
+            // New payment/charge created
+            const { data: sub } = await supabaseAdmin
+                .from('subscriptions')
+                .select('user_id')
+                .eq('asaas_subscription_id', subscriptionId)
+                .single();
+
+            if (sub?.user_id) {
+                const valueFormatted = payment.value ? `R$ ${payment.value.toFixed(2).replace('.', ',')}` : '';
+                const dueDate = payment.dueDate ? new Date(payment.dueDate).toLocaleDateString('pt-BR') : '';
+                await supabaseAdmin
+                    .from('notifications')
+                    .insert({
+                        user_id: sub.user_id,
+                        title: '📄 Nova Cobrança Gerada',
+                        message: `Uma nova cobrança de ${valueFormatted} foi gerada com vencimento em ${dueDate}.`,
+                        type: 'info'
+                    });
+                console.log(`[WEBHOOK] Payment created notification for user ${sub.user_id}`);
+            }
+
         } else if (event === 'PAYMENT_OVERDUE') {
+            // Get user_id from subscription
+            const { data: sub } = await supabaseAdmin
+                .from('subscriptions')
+                .select('user_id')
+                .eq('asaas_subscription_id', subscriptionId)
+                .single();
+
+            // Update subscription status
             await supabaseAdmin
                 .from('subscriptions')
                 .update({ status: 'overdue' })
                 .eq('asaas_subscription_id', subscriptionId);
+
+            // Create notification for user
+            if (sub?.user_id) {
+                await supabaseAdmin
+                    .from('notifications')
+                    .insert({
+                        user_id: sub.user_id,
+                        title: '⚠️ Falha no Pagamento',
+                        message: 'Não conseguimos processar o pagamento do seu cartão. Atualize seus dados de pagamento para evitar bloqueio.',
+                        type: 'error'
+                    });
+                console.log(`[WEBHOOK] Payment failure notification created for user ${sub.user_id}`);
+            }
         }
 
         return NextResponse.json({ received: true });

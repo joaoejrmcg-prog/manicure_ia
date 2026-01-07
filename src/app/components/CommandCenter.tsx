@@ -31,13 +31,13 @@ export default function CommandCenter() {
         const textarea = textareaRef.current;
         if (textarea) {
             textarea.style.height = 'auto';
-            textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+            textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
         }
     }, [input]);
 
     // Scroll to bottom on new message
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [messages]);
 
     return (
@@ -136,7 +136,7 @@ export default function CommandCenter() {
                             }
                         }}
                         placeholder={isListening ? "Ouvindo..." : "Digite ou fale um comando..."}
-                        className="flex-1 bg-neutral-800 border-neutral-700 text-neutral-200 placeholder:text-neutral-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none resize-none min-h-[48px] max-h-[120px] scrollbar-thin scrollbar-thumb-neutral-600"
+                        className="flex-1 bg-neutral-700/50 border border-neutral-600 text-neutral-200 placeholder:text-neutral-400 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none resize-none min-h-[56px] max-h-[200px] scrollbar-thin scrollbar-thumb-neutral-600"
                         disabled={isProcessing}
                         rows={1}
                     />

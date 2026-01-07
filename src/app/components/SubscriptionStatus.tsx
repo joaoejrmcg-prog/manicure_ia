@@ -94,25 +94,12 @@ export default function SubscriptionStatus() {
     const { daysRemaining, currentPeriodEnd, status, plan } = subscription;
     const endDate = new Date(currentPeriodEnd).toLocaleDateString('pt-BR');
     const isCanceled = status === 'canceled';
+    const isOverdue = status === 'overdue';
     const isExpired = daysRemaining !== null && daysRemaining <= 0;
     const isTrial = plan === 'trial';
     const isNearExpiration = daysRemaining !== null && daysRemaining > 0 && (
         (isTrial && daysRemaining <= 3) || (!isTrial && daysRemaining <= 5)
     );
-
-    // Se cancelado, mostra apenas a data de acesso final
-    if (isCanceled) {
-        return (
-            <div className="w-full max-w-xl mx-auto mb-4 px-4">
-                <div className="bg-neutral-900/50 border border-neutral-800 rounded-lg p-3 flex items-center justify-between text-xs text-neutral-400">
-                    <div className="flex items-center gap-2">
-                        <Calendar size={14} />
-                        <span>Seu acesso vai até {endDate}</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     // Modal de Pagamento
     const PaymentModal = () => (
@@ -150,6 +137,51 @@ export default function SubscriptionStatus() {
             </div>
         </div>
     );
+
+    // Se cancelado, mostra apenas a data de acesso final
+    if (isCanceled) {
+        return (
+            <div className="w-full max-w-xl mx-auto mb-4 px-4">
+                <div className="bg-neutral-900/50 border border-neutral-800 rounded-lg p-3 flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center gap-2">
+                        <Calendar size={14} />
+                        <span>Seu acesso vai até {endDate}</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Se pagamento falhou (overdue), mostra alerta específico
+    if (isOverdue) {
+        return (
+            <>
+                <div className="w-full max-w-xl mx-auto mb-4 px-4">
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-red-500/20 text-red-400 p-2 rounded-full">
+                                <AlertTriangle size={18} />
+                            </div>
+                            <div>
+                                <p className="text-red-200 font-medium text-sm">Falha no Pagamento</p>
+                                <p className="text-red-300/80 text-xs mt-0.5">Não conseguimos cobrar seu cartão. Atualize seus dados.</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowPaymentModal(true)}
+                            className="bg-red-600 text-white text-xs px-3 py-1.5 rounded-md font-medium hover:bg-red-700 transition-colors flex items-center gap-1"
+                        >
+                            Atualizar
+                            <ChevronRight size={14} />
+                        </button>
+                    </div>
+                </div>
+                {showPaymentModal && <PaymentModal />}
+                {processingPayment && <LoadingOverlay />}
+            </>
+        );
+    }
+
 
     // Se expirado ou próximo do vencimento
     if (isExpired || isNearExpiration) {

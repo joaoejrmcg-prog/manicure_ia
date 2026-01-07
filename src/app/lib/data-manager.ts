@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Client, Appointment, FinancialRecord } from "../types";
+import { Client, Appointment, FinancialRecord, RecurringException } from "../types";
 import { checkWritePermission } from "../actions/subscription";
 
 export const DataManager = {
@@ -395,5 +395,249 @@ export const DataManager = {
 
         if (error) throw error;
         return data as FinancialRecord[];
+    },
+
+    // ============================================
+    // RECURRING APPOINTMENTS
+    // ============================================
+
+    addRecurringAppointment: async (
+        clientId: string,
+        description: string,
+        recurrenceType: 'weekly' | 'monthly',
+        options: {
+            dayOfWeek?: number; // 0=Sunday, 6=Saturday
+            dayOfMonth?: number; // 1-31
+            time?: string; // HH:MM format
+            endDate?: Date;
+        }
+    ) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        // Create a placeholder date_time for the recurring appointment
+        const now = new Date();
+        const timeStr = options.time || '09:00';
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        now.setHours(hours, minutes, 0, 0);
+
+        const { data, error } = await supabase
+            .from('appointments')
+            .insert([{
+                client_id: clientId,
+                date_time: now.toISOString(),
+                description,
+                user_id: user.id,
+                is_recurring: true,
+                recurrence_type: recurrenceType,
+                recurrence_day_of_week: options.dayOfWeek,
+                recurrence_day_of_month: options.dayOfMonth,
+                recurrence_time: timeStr + ':00',
+                recurrence_end_date: options.endDate?.toISOString() || null
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as Appointment;
+    },
+
+    getRecurringAppointments: async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        const { data, error } = await supabase
+            .from('appointments')
+            .select('*, client:clients(*)')
+            .eq('user_id', user.id)
+            .eq('is_recurring', true)
+            .is('recurrence_end_date', null) // Only active recurring
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data as Appointment[];
+    },
+
+    getRecurringExceptions: async (recurringAppointmentId: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        const { data, error } = await supabase
+            .from('recurring_exceptions')
+            .select('*')
+            .eq('recurring_appointment_id', recurringAppointmentId)
+            .eq('user_id', user.id);
+
+        if (error) throw error;
+        return data as RecurringException[];
+    },
+
+    addRecurringException: async (
+        recurringAppointmentId: string,
+        exceptionDate: Date,
+        exceptionType: 'cancelled' | 'rescheduled',
+        options?: {
+            rescheduledTo?: Date;
+            reason?: string;
+        }
+    ) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        // Format date as YYYY-MM-DD
+        const dateStr = exceptionDate.toISOString().split('T')[0];
+
+        const { data, error } = await supabase
+            .from('recurring_exceptions')
+            .insert([{
+                recurring_appointment_id: recurringAppointmentId,
+                user_id: user.id,
+                exception_date: dateStr,
+                exception_type: exceptionType,
+                rescheduled_to: options?.rescheduledTo?.toISOString() || null,
+                reason: options?.reason || null
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as RecurringException;
+    },
+
+    cancelRecurringSeries: async (recurringAppointmentId: string, endDate?: Date) => {
+        const perm = await checkWritePermission();
+        if (!perm.allowed) throw new Error(perm.message);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        const { data, error } = await supabase
+            .from('appointments')
+            .update({
+                recurrence_end_date: (endDate || new Date()).toISOString()
+            })
+            .eq('id', recurringAppointmentId)
+            .eq('user_id', user.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as Appointment;
+    },
+
+    findRecurringAppointmentByClientAndDescription: async (clientId: string, description?: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        let query = supabase
+            .from('appointments')
+            .select('*, client:clients(*)')
+            .eq('user_id', user.id)
+            .eq('client_id', clientId)
+            .eq('is_recurring', true)
+            .is('recurrence_end_date', null);
+
+        if (description) {
+            query = query.ilike('description', `%${description}%`);
+        }
+
+        const { data, error } = await query.limit(1).single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data as Appointment | null;
+    },
+
+    getExpandedAppointments: async (startDate: Date, endDate: Date) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Usuário não autenticado");
+
+        // Get regular (non-recurring) appointments in the range
+        // Include is_recurring = false OR is_recurring IS NULL (legacy appointments)
+        const { data: regularAppointments, error: regularError } = await supabase
+            .from('appointments')
+            .select('*, client:clients(*)')
+            .eq('user_id', user.id)
+            .or('is_recurring.eq.false,is_recurring.is.null')
+            .gte('date_time', startDate.toISOString())
+            .lte('date_time', endDate.toISOString())
+            .order('date_time', { ascending: true });
+
+        if (regularError) throw regularError;
+
+        // Get active recurring appointments
+        const { data: recurringAppointments, error: recurringError } = await supabase
+            .from('appointments')
+            .select('*, client:clients(*)')
+            .eq('user_id', user.id)
+            .eq('is_recurring', true)
+            .or(`recurrence_end_date.is.null,recurrence_end_date.gte.${startDate.toISOString()}`);
+
+        if (recurringError) throw recurringError;
+
+        // Expand recurring appointments into instances
+        const expandedRecurring: Appointment[] = [];
+
+        for (const recurring of recurringAppointments || []) {
+            // Get exceptions for this recurring appointment
+            const { data: exceptions } = await supabase
+                .from('recurring_exceptions')
+                .select('*')
+                .eq('recurring_appointment_id', recurring.id)
+                .gte('exception_date', startDate.toISOString().split('T')[0])
+                .lte('exception_date', endDate.toISOString().split('T')[0]);
+
+            const exceptionDates = new Set((exceptions || [])
+                .filter(e => e.exception_type === 'cancelled')
+                .map(e => e.exception_date));
+
+            // Generate instances within the date range
+            const currentDate = new Date(startDate);
+            while (currentDate <= endDate) {
+                let shouldAdd = false;
+
+                if (recurring.recurrence_type === 'weekly' && recurring.recurrence_day_of_week !== null) {
+                    shouldAdd = currentDate.getDay() === recurring.recurrence_day_of_week;
+                } else if (recurring.recurrence_type === 'monthly' && recurring.recurrence_day_of_month !== null) {
+                    shouldAdd = currentDate.getDate() === recurring.recurrence_day_of_month;
+                }
+
+                if (shouldAdd) {
+                    const dateStr = currentDate.toISOString().split('T')[0];
+
+                    // Check if this date is an exception
+                    if (!exceptionDates.has(dateStr)) {
+                        // Check if recurrence has ended
+                        if (!recurring.recurrence_end_date || new Date(recurring.recurrence_end_date) >= currentDate) {
+                            // Create instance
+                            const instanceDate = new Date(currentDate);
+                            if (recurring.recurrence_time) {
+                                const [h, m] = recurring.recurrence_time.split(':').map(Number);
+                                instanceDate.setHours(h, m, 0, 0);
+                            }
+
+                            expandedRecurring.push({
+                                ...recurring,
+                                id: `${recurring.id}-${dateStr}`, // Virtual ID
+                                date_time: instanceDate.toISOString()
+                            });
+                        }
+                    }
+                }
+
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+        }
+
+        // Combine and sort
+        const allAppointments = [...(regularAppointments || []), ...expandedRecurring];
+        allAppointments.sort((a, b) => new Date(a.date_time).getTime() - new Date(b.date_time).getTime());
+
+        return allAppointments as Appointment[];
     }
 };

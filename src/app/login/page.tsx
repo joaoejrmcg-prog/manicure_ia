@@ -62,6 +62,7 @@ function LoginForm() {
                             console.error('[BIOMETRIC] Refresh token invalid or expired:', error);
                             // Token inválido - limpar dados biométricos
                             localStorage.removeItem('biometric_refresh_token');
+                            localStorage.removeItem('biometric_enrolled');
                         }
                     }
 
@@ -230,7 +231,7 @@ function LoginForm() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="seu@email.com"
-                                className="w-full p-3 bg-neutral-950/50 border border-neutral-800 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-600"
+                                className="w-full p-3 bg-neutral-800/60 border border-neutral-700 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-500"
                                 required
                             />
                         </div>
@@ -241,7 +242,7 @@ function LoginForm() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="••••••••"
-                                className="w-full p-3 bg-neutral-950/50 border border-neutral-800 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-600"
+                                className="w-full p-3 bg-neutral-800/60 border border-neutral-700 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-500"
                                 required
                             />
                         </div>
@@ -253,7 +254,7 @@ function LoginForm() {
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     placeholder="••••••••"
-                                    className="w-full p-3 bg-neutral-950/50 border border-neutral-800 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-600"
+                                    className="w-full p-3 bg-neutral-800/60 border border-neutral-700 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all text-neutral-200 placeholder:text-neutral-500"
                                     required
                                 />
                             </div>

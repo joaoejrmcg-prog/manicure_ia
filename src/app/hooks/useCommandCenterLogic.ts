@@ -102,6 +102,8 @@ export function useCommandCenterLogic() {
             });
         }
 
+        /* 
+        // Dicas desativadas temporariamente a pedido do usuário
         if (role === 'assistant' && type === 'success') {
             if (Math.random() < 0.3) {
                 setTimeout(() => {
@@ -115,6 +117,7 @@ export function useCommandCenterLogic() {
                 }, 500);
             }
         }
+        */
     };
 
     const checkLimit = async () => {
@@ -137,7 +140,14 @@ export function useCommandCenterLogic() {
     };
 
     const processAIResponse = async (userInput: string) => {
+        console.log('DEBUG: processAIResponse called', {
+            userInput,
+            conversationStateType: conversationState.type,
+            conversationStateData: 'data' in conversationState ? conversationState.data : null
+        });
+
         if (conversationState.type === 'CONFIRM_ADD_CLIENT' || conversationState.type === 'CONFIRM_ACTION') {
+            console.log('DEBUG: In CONFIRM state, checking for affirmative', { input: userInput.toLowerCase() });
             if (userInput.toLowerCase().match(/^(sim|s|pode|claro|ok|confirmo)/)) {
                 if (!await checkLimit()) return;
 
@@ -325,15 +335,105 @@ export function useCommandCenterLogic() {
                         const originalData = conversationState.data.originalIntent.data;
 
                         if (conversationState.data.originalIntent.intent === 'REGISTER_SALE') {
-                            const amount = Number(String(originalData.amount).replace(',', '.'));
+                            const amountRaw = originalData.amount;
+                            const amount = Number(String(amountRaw || '').replace(',', '.'));
+                            const downPayment = originalData.downPaymentValue || originalData.downPayment || 0;
+                            const installments = originalData.installments || 1;
                             let isPending = originalData.status === 'pending';
-                            let dueDate = originalData.dueDate;
+                            let dueDate = originalData.dueDate || originalData.dueDateText;
+
+                            // Check if we have incomplete data - need to continue asking questions
+                            if (!amount || isNaN(amount) || amount <= 0) {
+                                // Missing amount - need to continue slot filling
+                                addMessage('assistant', "Agora me conta: qual foi o valor total do serviço?");
+                                setConversationState({
+                                    type: 'FILLING_SLOT',
+                                    data: {
+                                        missingSlot: 'amount',
+                                        originalIntent: conversationState.data.originalIntent,
+                                        accumulatedData: {
+                                            ...originalData,
+                                            clientName: conversationState.data.name
+                                        }
+                                    }
+                                });
+                                return;
+                            }
 
                             if (!isPending && dueDate && dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
                                 isPending = true;
                             }
 
-                            if (isPending) {
+                            // Calculate installment value
+                            let finalInstallmentValue = originalData.installmentValue;
+                            if (!finalInstallmentValue) {
+                                if (downPayment > 0) {
+                                    if (installments > 1) {
+                                        finalInstallmentValue = (amount - downPayment) / (installments - 1);
+                                    } else {
+                                        finalInstallmentValue = amount - downPayment;
+                                    }
+                                } else {
+                                    finalInstallmentValue = amount / installments;
+                                }
+                            }
+
+                            // Handle down payment scenario
+                            if (downPayment > 0) {
+                                if (!originalData.paymentMethod) {
+                                    setConversationState({
+                                        type: 'ASK_PAYMENT_METHOD',
+                                        data: {
+                                            transactionData: {
+                                                ...originalData,
+                                                amount: downPayment,
+                                                isEntry: true,
+                                                remainingInstallments: installments - 1 || 1,
+                                                remainingValue: finalInstallmentValue,
+                                                fullAmount: amount,
+                                                dueDate: dueDate,
+                                                dueDateText: originalData.dueDateText
+                                            },
+                                            clientName: conversationState.data.name
+                                        }
+                                    });
+                                    addMessage('assistant', `Certo, entrada de R$${downPayment}. Qual a forma de pagamento da entrada?`);
+                                    return;
+                                }
+                                // If we have payment method, register entry + pending
+                                await DataManager.addTransaction({
+                                    type: 'income',
+                                    amount: downPayment,
+                                    description: `${originalData.service || 'Venda'} (Entrada)`,
+                                    payment_method: originalData.paymentMethod,
+                                    client_id: newClient.id,
+                                    status: 'paid'
+                                });
+                                // Register pending installments
+                                const remainingValue = amount - downPayment;
+                                if (remainingValue > 0) {
+                                    let baseDate = new Date();
+                                    if (dueDate) {
+                                        if (dueDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                            baseDate = new Date(dueDate);
+                                        }
+                                    }
+                                    // Format date locally to avoid UTC conversion
+                                    const year = baseDate.getFullYear();
+                                    const month = String(baseDate.getMonth() + 1).padStart(2, '0');
+                                    const day = String(baseDate.getDate()).padStart(2, '0');
+                                    await DataManager.addTransaction({
+                                        type: 'income',
+                                        amount: remainingValue,
+                                        description: `${originalData.service || 'Venda'} (Restante)`,
+                                        client_id: newClient.id,
+                                        status: 'pending',
+                                        due_date: `${year}-${month}-${day}`
+                                    });
+                                }
+                                addMessage('assistant', `Entrada de R$${downPayment} registrada + R$${amount - downPayment} pendente.`, 'success');
+                                await playAudioWithCache("Pronto, registrado.", undefined);
+                            } else if (isPending) {
                                 await DataManager.addTransaction({
                                     type: 'income',
                                     amount: amount,
@@ -400,14 +500,29 @@ export function useCommandCenterLogic() {
                     return;
                 }
             } else {
-                setConversationState({ type: 'IDLE' });
+                // Non-affirmative response
+                if (conversationState.type === 'CONFIRM_ADD_CLIENT') {
+                    // User said no to registering the client - cancel the flow
+                    console.log('DEBUG: User rejected client registration', { userInput });
+                    addMessage('assistant', "Tudo bem! Operação cancelada. Você pode recomeçar com o nome correto do cliente.", 'text');
+                    setConversationState({ type: 'IDLE' });
+                    return; // Stop processing for CONFIRM_ADD_CLIENT cancellation
+                } else if (conversationState.type === 'CONFIRM_ACTION') {
+                    // For CONFIRM_ACTION, forward non-affirmative responses to the AI
+                    // This allows slot-filling to continue (e.g., "com entrada" in response to "Foi com ou sem entrada?")
+                    console.log('DEBUG: CONFIRM_ACTION forwarding to AI for continued conversation', { userInput });
+                    // Don't cancel - fall through to the main AI processing below
+                    // Reset state to IDLE so the main flow can handle the input
+                    setConversationState({ type: 'IDLE' });
+                    // Don't return - let the code continue to process with the AI
+                }
             }
         }
 
         if (conversationState.type === 'FILLING_SLOT') {
             const { missingSlot, originalIntent, accumulatedData } = conversationState.data;
             const newData = { ...accumulatedData };
-            console.log('DEBUG: FILLING_SLOT start', { missingSlot, userInput, newData });
+            console.log('DEBUG: FILLING_SLOT start', { missingSlot, userInput, newData, originalIntent });
 
             // Enhanced heuristics to capture data even if not the current missing slot
             const lowerInput = userInput.toLowerCase();
@@ -419,7 +534,7 @@ export function useCommandCenterLogic() {
                 if (!isNaN(val)) newData.installments = val;
             }
 
-            // Try to extract down payment value (e.g., "entrada de 50")
+            // Try to extract down payment value (e.g., "entrada de 50", "me deu 50", "pagou 50")
             if (lowerInput.includes('entrada')) {
                 const downPaymentMatch = lowerInput.match(/entrada\s*(?:de)?\s*(?:r\$)?\s*(\d+(?:[.,]\d{2})?)/);
                 if (downPaymentMatch) {
@@ -428,6 +543,31 @@ export function useCommandCenterLogic() {
                         newData.downPaymentValue = val;
                         newData.hasDownPayment = true;
                     }
+                }
+            }
+
+            // Detect implicit down payment: "me deu X", "pagou X", "deu X de entrada"
+            if (!newData.downPaymentValue) {
+                const implicitDownPaymentMatch = lowerInput.match(/(?:me\s+deu|pagou|deu)\s*(?:r\$)?\s*(\d+(?:[.,]\d{2})?)/);
+                if (implicitDownPaymentMatch) {
+                    const val = parseFloat(implicitDownPaymentMatch[1].replace(',', '.'));
+                    if (!isNaN(val)) {
+                        newData.downPaymentValue = val;
+                        newData.hasDownPayment = true;
+                    }
+                }
+            }
+
+            // Detect "o resto", "vai me dar", "falta" as indicator of pending payment (need totalAmount)
+            if (lowerInput.includes('resto') || lowerInput.includes('falta') || lowerInput.includes('vai me dar') || lowerInput.includes('vai pagar')) {
+                // This indicates there's a pending amount, but we may not know the total yet
+                // If we have downPaymentValue but no amount, we'll need to ask for totalAmount
+                if (newData.downPaymentValue && !newData.amount) {
+                    newData.needsTotalAmount = true;
+                }
+                // If installments not set for entrada+resto scenario, default to 2
+                if (newData.hasDownPayment && !newData.installments) {
+                    newData.installments = 2;
                 }
             }
 
@@ -446,6 +586,8 @@ export function useCommandCenterLogic() {
                 if (!isNaN(val)) newData.downPaymentValue = val;
             } else if (missingSlot === 'dueDate') {
                 newData.dueDate = userInput;
+            } else if (missingSlot === 'paymentMethod') {
+                newData.paymentMethod = userInput;
             } else if (missingSlot === 'description' || missingSlot === 'service') {
                 newData[missingSlot] = userInput;
             }
@@ -479,6 +621,7 @@ export function useCommandCenterLogic() {
                     else if (!updatedData.installments) nextMissingSlot = 'installments';
                     else if (updatedData.hasDownPayment === undefined) nextMissingSlot = 'hasDownPayment';
                     else if (updatedData.hasDownPayment === true && !updatedData.downPaymentValue) nextMissingSlot = 'downPaymentValue';
+                    else if (updatedData.hasDownPayment === true && !updatedData.paymentMethod) nextMissingSlot = 'paymentMethod';
                     else if (!updatedData.dueDate) nextMissingSlot = 'dueDate';
 
                     setConversationState({
@@ -502,10 +645,42 @@ export function useCommandCenterLogic() {
 
                     // We should handle the success response here.
                     // Ensure we pass the accumulated data, merging with what the AI returned
-                    response.data = { ...newData, ...(response.data || {}) };
+                    // Ensure we pass the accumulated data, merging with what the AI returned
+                    // CRITICAL: We must be very careful about what we merge. 
+                    // The AI might return "paymentMethod: 18" because it saw "dia 18" in the context, 
+                    // overwriting the valid "Pix" we already had.
+
+                    const mergedData = { ...newData };
+
+                    // Only update fields that were missing or explicitly returned by AI as the target slot
+                    if (response.data) {
+                        Object.keys(response.data).forEach(key => {
+                            // Always accept the missing slot value
+                            if (key === missingSlot) {
+                                mergedData[key] = response.data[key];
+                            }
+                            // For other fields, only update if we don't have a value yet, 
+                            // OR if the AI is explicitly correcting it (this is a bit risky, but needed sometimes)
+                            // BUT specifically protect paymentMethod if we weren't asking for it
+                            else if (key === 'paymentMethod' && missingSlot !== 'paymentMethod' && newData.paymentMethod) {
+                                // Protect existing paymentMethod
+                                console.log('DEBUG: Protecting paymentMethod from overwrite', { existing: newData.paymentMethod, new: response.data[key] });
+                            }
+                            else {
+                                // For other fields, we generally trust the AI but prefer our accumulated data if it exists
+                                // unless it was empty/undefined
+                                if (!mergedData[key] || mergedData[key] === '' || mergedData[key] === 0) {
+                                    mergedData[key] = response.data[key];
+                                }
+                            }
+                        });
+                    }
+
+                    response.data = mergedData;
                     console.log('DEBUG: Final Action Data Merge', response.data);
                     await handleFinalAction(response);
-                    setConversationState({ type: 'IDLE' });
+                    // Don't set IDLE here - handleFinalAction manages its own state transitions
+                    // (e.g., it may set ASK_PAYMENT_METHOD if payment method is needed)
                     return;
                 }
             } catch (e) {
@@ -550,6 +725,85 @@ export function useCommandCenterLogic() {
                                 payment_method: updatedTransactionData.paymentMethod
                             });
                             addMessage('assistant', `Recebimento de ${clientName} (${updatedTransactionData.description}) registrado no ${updatedTransactionData.paymentMethod}!`, 'success');
+                        } else if (updatedTransactionData.isEntry) {
+                            // This is an entry payment - register the entry AND the pending installments
+                            const entryAmount = amount;
+                            const fullAmount = updatedTransactionData.fullAmount || amount;
+                            const remainingValue = fullAmount - entryAmount;
+                            const remainingInstallments = updatedTransactionData.remainingInstallments || 1;
+                            const serviceName = updatedTransactionData.service || 'Venda';
+                            const dueDate = updatedTransactionData.dueDate || updatedTransactionData.dueDateText;
+
+                            // 1. Register the entry (paid)
+                            await DataManager.addTransaction({
+                                type: 'income',
+                                amount: entryAmount,
+                                description: `${serviceName} (Entrada)`,
+                                payment_method: updatedTransactionData.paymentMethod,
+                                client_id: client.id,
+                                status: 'paid'
+                            });
+
+                            // 2. Register the pending installments
+                            if (remainingValue > 0 && remainingInstallments > 0) {
+                                const installmentValue = remainingValue / remainingInstallments;
+                                let baseDate = new Date();
+
+                                // Parse dueDate if provided
+                                console.log('DEBUG: dueDate parsing', { dueDate, type: typeof dueDate });
+                                if (dueDate) {
+                                    if (typeof dueDate === 'string') {
+                                        // Try to parse ISO date
+                                        if (dueDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                            const cleanDate = dueDate.split('T')[0];
+                                            const [y, m, d] = cleanDate.split('-').map(Number);
+                                            baseDate = new Date(y, m - 1, d);
+                                        } else {
+                                            // Try to extract day from "dia 15" or "15/02" format
+                                            const dayMatch = dueDate.match(/(\d{1,2})(?:\/(\d{1,2}))?/);
+                                            if (dayMatch) {
+                                                const day = parseInt(dayMatch[1]);
+                                                const month = dayMatch[2] ? parseInt(dayMatch[2]) - 1 : baseDate.getMonth();
+                                                baseDate.setDate(day);
+                                                if (dayMatch[2]) baseDate.setMonth(month);
+                                                // If the date is in the past, move to next month
+                                                if (baseDate < new Date()) {
+                                                    baseDate.setMonth(baseDate.getMonth() + 1);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                for (let i = 0; i < remainingInstallments; i++) {
+                                    const installmentDate = new Date(baseDate.getTime());
+                                    installmentDate.setMonth(installmentDate.getMonth() + i);
+                                    // Format date locally to avoid UTC conversion
+                                    const year = installmentDate.getFullYear();
+                                    const month = String(installmentDate.getMonth() + 1).padStart(2, '0');
+                                    const day = String(installmentDate.getDate()).padStart(2, '0');
+                                    const dateStr = `${year}-${month}-${day}`;
+                                    console.log('DEBUG: Final dateStr for saving', { dateStr, baseDate: baseDate.toDateString(), installmentDate: installmentDate.toDateString() });
+
+                                    await DataManager.addTransaction({
+                                        type: 'income',
+                                        amount: installmentValue,
+                                        description: remainingInstallments === 1
+                                            ? `${serviceName} (Restante)`
+                                            : `${serviceName} (${i + 1}/${remainingInstallments})`,
+                                        client_id: client.id,
+                                        status: 'pending',
+                                        due_date: dateStr
+                                    });
+                                }
+
+                                const pendingMsg = remainingInstallments === 1
+                                    ? `Entrada de R$${entryAmount} registrada + R$${remainingValue.toFixed(2)} pendente.`
+                                    : `Entrada de R$${entryAmount} registrada + ${remainingInstallments}x de R$${installmentValue.toFixed(2)} pendentes.`;
+                                addMessage('assistant', pendingMsg, 'success');
+                            } else {
+                                addMessage('assistant', `Entrada de R$${entryAmount} registrada no ${updatedTransactionData.paymentMethod}.`, 'success');
+                            }
                         } else {
                             await DataManager.addTransaction({
                                 type: 'income',
@@ -644,6 +898,29 @@ export function useCommandCenterLogic() {
 
             switch (response.intent) {
                 case 'CONFIRMATION_REQUIRED':
+                    // FIRST: Check if client exists before asking for more data
+                    // This improves UX by not wasting time collecting data for a non-existent client
+                    if (response.data?.clientName && (response.data?.originalIntent === 'REGISTER_SALE' || response.data?.originalIntent === 'SCHEDULE_SERVICE')) {
+                        const clients = await DataManager.getClients();
+                        const clientExists = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
+
+                        if (!clientExists) {
+                            // Client doesn't exist - ask to register BEFORE continuing with questions
+                            addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}". Deseja cadastrá-la agora? (Se não, você pode recomeçar com o nome correto)`);
+                            setConversationState({
+                                type: 'CONFIRM_ADD_CLIENT',
+                                data: {
+                                    name: response.data.clientName,
+                                    originalIntent: {
+                                        intent: response.data.originalIntent,
+                                        data: response.data
+                                    }
+                                }
+                            });
+                            return;
+                        }
+                    }
+
                     if (response.data?.originalIntent === 'REGISTER_SALE' && response.data?.amount && !response.data?.paymentMethod && response.data?.clientName && response.data?.service) {
                         addMessage('assistant', response.message);
                         setConversationState({
@@ -663,6 +940,26 @@ export function useCommandCenterLogic() {
                             data: {
                                 scheduleData: response.data,
                                 clientName: response.data.clientName
+                            }
+                        });
+                        return;
+                    }
+                    // If amount is missing for REGISTER_SALE, enter FILLING_SLOT instead of CONFIRM_ACTION
+                    if (response.data?.originalIntent === 'REGISTER_SALE' && !response.data?.amount) {
+                        console.log('DEBUG: Missing amount, entering FILLING_SLOT');
+                        addMessage('assistant', response.message);
+                        setConversationState({
+                            type: 'FILLING_SLOT',
+                            data: {
+                                missingSlot: 'amount',
+                                originalIntent: {
+                                    intent: response.data.originalIntent,
+                                    data: response.data
+                                },
+                                accumulatedData: {
+                                    ...response.data,
+                                    clientName: response.data.clientName
+                                }
                             }
                         });
                         return;
@@ -743,7 +1040,7 @@ export function useCommandCenterLogic() {
                             }
 
                             const installments = response.data.installments || 1;
-                            const downPayment = response.data.downPayment || 0;
+                            const downPayment = response.data.downPaymentValue || response.data.downPayment || 0;
 
                             let finalInstallmentValue = response.data.installmentValue;
                             if (!finalInstallmentValue) {
@@ -763,7 +1060,16 @@ export function useCommandCenterLogic() {
                                     setConversationState({
                                         type: 'ASK_PAYMENT_METHOD',
                                         data: {
-                                            transactionData: { ...response.data, amount: downPayment, isEntry: true, remainingInstallments: installments - 1, remainingValue: finalInstallmentValue, fullAmount: amount },
+                                            transactionData: {
+                                                ...response.data,
+                                                amount: downPayment,
+                                                isEntry: true,
+                                                remainingInstallments: installments - 1,
+                                                remainingValue: finalInstallmentValue,
+                                                fullAmount: amount,
+                                                dueDate: response.data.dueDate,
+                                                dueDateText: response.data.dueDateText
+                                            },
                                             clientName: client.name
                                         }
                                     });
@@ -785,7 +1091,16 @@ export function useCommandCenterLogic() {
                             const loopCount = downPayment > 0 ? installments - 1 : installments;
 
                             if (loopCount > 0) {
-                                const baseDate = response.data.dueDate ? new Date(response.data.dueDate) : new Date();
+                                let baseDate = new Date();
+                                if (response.data.dueDate) {
+                                    if (response.data.dueDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                        const cleanDate = response.data.dueDate.split('T')[0];
+                                        const [y, m, d] = cleanDate.split('-').map(Number);
+                                        baseDate = new Date(y, m - 1, d);
+                                    } else {
+                                        baseDate = new Date(response.data.dueDate);
+                                    }
+                                }
                                 for (let i = 0; i < loopCount; i++) {
                                     const date = new Date(baseDate.getTime());
                                     const monthOffset = i;
@@ -831,6 +1146,11 @@ export function useCommandCenterLogic() {
                             }
 
                             const date = response.data.isoDate ? new Date(response.data.isoDate) : new Date();
+                            if (response.data.isoDate && isNaN(date.getTime())) {
+                                console.error("Invalid date in SCHEDULE_SERVICE:", response.data.isoDate);
+                                addMessage('assistant', "Erro na data do agendamento.", 'error');
+                                return;
+                            }
                             if (!response.data.isoDate) {
                                 const now = new Date();
                                 if (response.data.timeString?.includes('amanhã')) date.setDate(now.getDate() + 1);
@@ -870,7 +1190,7 @@ export function useCommandCenterLogic() {
                     const expensePaymentMethod = response.data.paymentMethod;
 
                     const expInstallments = response.data.installments || 1;
-                    const expDownPayment = response.data.downPayment || 0;
+                    const expDownPayment = response.data.downPaymentValue || response.data.downPayment || 0;
 
                     let expFinalInstallmentValue = response.data.installmentValue;
                     if (!expFinalInstallmentValue) {
@@ -1171,6 +1491,122 @@ export function useCommandCenterLogic() {
                     }
                     break;
 
+                case 'SCHEDULE_RECURRING':
+                    if (response.data?.clientName) {
+                        const clients = await DataManager.getClients();
+                        const client = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
+
+                        if (!client) {
+                            addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}". Deseja cadastrá-la agora?`);
+                            setConversationState({
+                                type: 'CONFIRM_ADD_CLIENT',
+                                data: {
+                                    name: response.data.clientName,
+                                    originalIntent: response
+                                }
+                            });
+                            return;
+                        }
+
+                        const recurrenceType = response.data.recurrenceType || 'weekly';
+                        const dayOfWeek = response.data.dayOfWeek;
+                        const dayOfMonth = response.data.dayOfMonth;
+                        const time = response.data.time || '09:00';
+
+                        const appointment = await DataManager.addRecurringAppointment(
+                            client.id,
+                            response.data.service || 'Agendamento recorrente',
+                            recurrenceType,
+                            {
+                                dayOfWeek: recurrenceType === 'weekly' ? dayOfWeek : undefined,
+                                dayOfMonth: recurrenceType === 'monthly' ? dayOfMonth : undefined,
+                                time
+                            }
+                        );
+
+                        const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+                        let recurrenceMsg = '';
+                        if (recurrenceType === 'weekly' && dayOfWeek !== undefined) {
+                            recurrenceMsg = `toda ${dayNames[dayOfWeek]} às ${time}`;
+                        } else if (recurrenceType === 'monthly' && dayOfMonth) {
+                            recurrenceMsg = `todo dia ${dayOfMonth}`;
+                        }
+
+                        addMessage('assistant', `🔄 Agendamento recorrente criado! ${response.data.service || 'Serviço'} para ${client.name} ${recurrenceMsg}.`, 'success');
+                    }
+                    break;
+
+                case 'CANCEL_RECURRING_INSTANCE':
+                    if (response.data?.clientName) {
+                        const clients = await DataManager.getClients();
+                        const client = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
+
+                        if (!client) {
+                            addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}".`, 'error');
+                            break;
+                        }
+
+                        const recurring = await DataManager.findRecurringAppointmentByClientAndDescription(
+                            client.id,
+                            response.data.service
+                        );
+
+                        if (!recurring) {
+                            addMessage('assistant', `Não encontrei agendamento recorrente para ${client.name}.`, 'error');
+                            break;
+                        }
+
+                        // Calculate the date to cancel
+                        let cancelDate = new Date();
+                        if (response.data.cancelDate) {
+                            cancelDate = new Date(response.data.cancelDate);
+                        } else {
+                            // If no specific date, find the next occurrence
+                            const today = new Date();
+                            if (recurring.recurrence_type === 'weekly' && recurring.recurrence_day_of_week !== undefined) {
+                                while (cancelDate.getDay() !== recurring.recurrence_day_of_week) {
+                                    cancelDate.setDate(cancelDate.getDate() + 1);
+                                }
+                            } else if (recurring.recurrence_type === 'monthly' && recurring.recurrence_day_of_month) {
+                                cancelDate.setDate(recurring.recurrence_day_of_month);
+                                if (cancelDate < today) {
+                                    cancelDate.setMonth(cancelDate.getMonth() + 1);
+                                }
+                            }
+                        }
+
+                        await DataManager.addRecurringException(recurring.id, cancelDate, 'cancelled');
+
+                        addMessage('assistant', `❌ Cancelado: ${recurring.description} de ${client.name} no dia ${cancelDate.toLocaleDateString('pt-BR')}.`, 'success');
+                    }
+                    break;
+
+                case 'CANCEL_RECURRING_SERIES':
+                    if (response.data?.clientName) {
+                        const clients = await DataManager.getClients();
+                        const client = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
+
+                        if (!client) {
+                            addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}".`, 'error');
+                            break;
+                        }
+
+                        const recurring = await DataManager.findRecurringAppointmentByClientAndDescription(
+                            client.id,
+                            response.data.service
+                        );
+
+                        if (!recurring) {
+                            addMessage('assistant', `Não encontrei agendamento recorrente para ${client.name}.`, 'error');
+                            break;
+                        }
+
+                        await DataManager.cancelRecurringSeries(recurring.id);
+
+                        addMessage('assistant', `🛑 Série encerrada: ${recurring.description} de ${client.name} não terá mais ocorrências.`, 'success');
+                    }
+                    break;
+
                 case 'RISKY_ACTION':
                     addMessage('assistant', response.message, 'text');
                     break;
@@ -1217,7 +1653,20 @@ export function useCommandCenterLogic() {
             const amount = Number(amountStr);
 
             if (!amount || isNaN(amount) || amount <= 0) {
+                console.log('DEBUG: Missing amount in REGISTER_SALE, transitioning to FILLING_SLOT');
+                // Missing amount - need to continue slot filling
                 addMessage('assistant', response.message || "Por favor, informe o valor do serviço.");
+                setConversationState({
+                    type: 'FILLING_SLOT',
+                    data: {
+                        missingSlot: 'amount',
+                        originalIntent: response,
+                        accumulatedData: {
+                            ...response.data,
+                            clientName: client.name
+                        }
+                    }
+                });
                 return;
             }
 
@@ -1244,7 +1693,16 @@ export function useCommandCenterLogic() {
                     setConversationState({
                         type: 'ASK_PAYMENT_METHOD',
                         data: {
-                            transactionData: { ...response.data, amount: downPayment, isEntry: true, remainingInstallments: installments - 1, remainingValue: finalInstallmentValue, fullAmount: amount },
+                            transactionData: {
+                                ...response.data,
+                                amount: downPayment,
+                                isEntry: true,
+                                remainingInstallments: installments - 1,
+                                remainingValue: finalInstallmentValue,
+                                fullAmount: amount,
+                                dueDate: response.data.dueDate,
+                                dueDateText: response.data.dueDateText
+                            },
                             clientName: client.name
                         }
                     });
@@ -1252,21 +1710,115 @@ export function useCommandCenterLogic() {
                     return;
                 }
 
+                // If we have payment method, register entry + pending (Logic copied from ASK_PAYMENT_METHOD for consistency)
+                const entryAmount = downPayment;
+                const fullAmount = amount;
+                const remainingValue = fullAmount - entryAmount;
+                const remainingInstallments = installments - 1;
+                const serviceName = response.data.service || 'Venda';
+                const dueDate = response.data.dueDate || response.data.dueDateText;
+
+                // 1. Register the entry (paid)
                 await DataManager.addTransaction({
                     type: 'income',
-                    amount: downPayment,
-                    description: `${response.data.service} (Entrada)`,
+                    amount: entryAmount,
+                    description: `${serviceName} (Entrada)`,
                     payment_method: response.data.paymentMethod,
                     client_id: client.id,
                     status: 'paid'
                 });
+
+                // 2. Register the pending installments
+                if (remainingValue > 0 && remainingInstallments > 0) {
+                    const installmentValue = remainingValue / remainingInstallments;
+                    let baseDate = new Date();
+
+                    // Parse dueDate if provided
+                    if (dueDate) {
+                        if (typeof dueDate === 'string') {
+                            // Try to parse ISO date
+                            if (dueDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                const cleanDate = dueDate.split('T')[0];
+                                const [y, m, d] = cleanDate.split('-').map(Number);
+                                baseDate = new Date(y, m - 1, d);
+                            } else {
+                                // Try to extract day from "dia 15" or "15/02" format
+                                const dayMatch = dueDate.match(/(\d{1,2})(?:\/(\d{1,2}))?/);
+                                if (dayMatch) {
+                                    const day = parseInt(dayMatch[1]);
+                                    const month = dayMatch[2] ? parseInt(dayMatch[2]) - 1 : baseDate.getMonth();
+                                    baseDate.setDate(day);
+                                    if (dayMatch[2]) baseDate.setMonth(month);
+                                    // If the date is in the past, move to next month
+                                    if (baseDate < new Date()) {
+                                        baseDate.setMonth(baseDate.getMonth() + 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (let i = 0; i < remainingInstallments; i++) {
+                        const installmentDate = new Date(baseDate.getTime());
+                        installmentDate.setMonth(installmentDate.getMonth() + i);
+                        // Format date locally to avoid UTC conversion
+                        const year = installmentDate.getFullYear();
+                        const month = String(installmentDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(installmentDate.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${day}`;
+
+                        await DataManager.addTransaction({
+                            type: 'income',
+                            amount: installmentValue,
+                            description: remainingInstallments === 1
+                                ? `${serviceName} (Restante)`
+                                : `${serviceName} (${i + 1}/${remainingInstallments})`,
+                            client_id: client.id,
+                            status: 'pending',
+                            due_date: dateStr
+                        });
+                    }
+
+                    const pendingMsg = remainingInstallments === 1
+                        ? `Entrada de R$${entryAmount} registrada + R$${remainingValue.toFixed(2)} pendente.`
+                        : `Entrada de R$${entryAmount} registrada + ${remainingInstallments}x de R$${installmentValue.toFixed(2)} pendentes.`;
+                    addMessage('assistant', pendingMsg, 'success');
+                } else {
+                    addMessage('assistant', `Entrada de R$${entryAmount} registrada no ${response.data.paymentMethod}.`, 'success');
+                }
+
+                await playAudioWithCache("Pronto, registrado.", undefined);
+                return; // Exit after handling down payment flow
             }
 
-            const startIdx = downPayment > 0 ? 1 : 0;
-            const loopCount = downPayment > 0 ? installments - 1 : installments;
+            // Normal flow (no down payment or full payment)
+            const loopCount = installments;
 
-            if (loopCount > 0) {
-                const baseDate = response.data.dueDate ? new Date(response.data.dueDate) : new Date();
+            if (loopCount > 1) {
+                let baseDate = new Date();
+                const dueDateVal = response.data.dueDate || response.data.dueDateText;
+
+                if (dueDateVal) {
+                    const dueDateStr = String(dueDateVal);
+                    if (dueDateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+                        const cleanDate = dueDateStr.split('T')[0];
+                        const [y, m, d] = cleanDate.split('-').map(Number);
+                        baseDate = new Date(y, m - 1, d);
+                    } else {
+                        const dayMatch = dueDateStr.match(/(\d{1,2})(?:\/(\d{1,2}))?/);
+                        if (dayMatch) {
+                            const day = parseInt(dayMatch[1]);
+                            const month = dayMatch[2] ? parseInt(dayMatch[2]) - 1 : baseDate.getMonth();
+                            baseDate.setDate(day);
+                            if (dayMatch[2]) baseDate.setMonth(month);
+
+                            // Heuristic: If date is in past, assume next month
+                            if (baseDate < new Date()) {
+                                baseDate.setMonth(baseDate.getMonth() + 1);
+                            }
+                        }
+                    }
+                }
                 for (let i = 0; i < loopCount; i++) {
                     const date = new Date(baseDate.getTime());
                     const monthOffset = i;

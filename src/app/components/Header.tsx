@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { User } from "@supabase/supabase-js";
-import { Bell, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import TipOfTheDay from "./TipOfTheDay";
+import NotificationBell from "./NotificationBell";
 
 interface HeaderProps {
     onMenuClick?: () => void;
@@ -96,6 +97,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </div>
 
             <div className="flex items-center gap-4">
+                <NotificationBell />
                 <TipOfTheDay />
                 <div
                     onClick={handleAvatarClick}

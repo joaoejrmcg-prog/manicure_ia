@@ -431,7 +431,12 @@ _Gerado por Meu Negócio IA_`;
                                     {record.status === 'pending' && (
                                         <div className="mt-1">
                                             <span className="text-xs font-medium bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded-full">
-                                                Pendente {record.due_date && `- Vence ${new Date(record.due_date).toLocaleDateString()}`}
+                                                Pendente {record.due_date && (() => {
+                                                    // Parse date as local time to avoid UTC conversion
+                                                    const [y, m, d] = record.due_date.split('T')[0].split('-').map(Number);
+                                                    const localDate = new Date(y, m - 1, d);
+                                                    return `- Vence ${localDate.toLocaleDateString()}`;
+                                                })()}
                                             </span>
                                         </div>
                                     )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, ChevronRight, Lightbulb, X } from "lucide-react";
+import { ChevronRight, Lightbulb, X } from "lucide-react";
 import { TIPS, getTipOfTheDayIndex } from "@/lib/tips";
 
 export default function TipOfTheDay() {
@@ -24,7 +24,7 @@ export default function TipOfTheDay() {
                 className="p-2 text-neutral-400 hover:text-yellow-400 transition-colors relative group"
                 title="Dica do Dia"
             >
-                <Bell className="w-5 h-5 group-hover:animate-swing" />
+                <Lightbulb className="w-5 h-5 group-hover:animate-pulse" />
                 <span className="absolute top-2 right-2 w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
             </button>
 

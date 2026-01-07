@@ -32,8 +32,16 @@ export default function AgendaPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
+            // Get date range: 1 month before to 3 months ahead to include recurring appointments
+            const startDate = new Date();
+            startDate.setMonth(startDate.getMonth() - 1);
+            startDate.setDate(1);
+            const endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + 3);
+            endDate.setDate(0); // Last day of the month
+
             const [appointmentsData, clientsData] = await Promise.all([
-                DataManager.getAppointments(),
+                DataManager.getExpandedAppointments(startDate, endDate),
                 DataManager.getClients()
             ]);
             setAppointments(appointmentsData);

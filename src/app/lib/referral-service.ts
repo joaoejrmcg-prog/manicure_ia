@@ -45,7 +45,7 @@ export async function processReferralRewardAdmin(supabaseAdmin: SupabaseClient, 
                 // C. Add 30 days to referrer subscription
                 const { data: refSub, error: subError } = await supabaseAdmin
                     .from('subscriptions')
-                    .select('current_period_end')
+                    .select('current_period_end, asaas_subscription_id')
                     .eq('user_id', referrerId)
                     .single();
 
@@ -72,6 +72,21 @@ export async function processReferralRewardAdmin(supabaseAdmin: SupabaseClient, 
                     return { success: false, error: updateError };
                 }
 
+                // C2. Defer Asaas billing if subscription exists
+                if (refSub?.asaas_subscription_id) {
+                    try {
+                        const { updateAsaasSubscription } = await import('@/lib/asaas');
+                        const newDueDate = newEnd.toISOString().split('T')[0]; // YYYY-MM-DD format
+                        await updateAsaasSubscription(refSub.asaas_subscription_id, {
+                            nextDueDate: newDueDate
+                        });
+                        console.log(`[REFERRAL SERVICE] Asaas billing deferred to ${newDueDate}`);
+                    } catch (asaasError) {
+                        console.error('[REFERRAL SERVICE] Failed to defer Asaas billing:', asaasError);
+                        // Continue even if Asaas update fails - local DB is already updated
+                    }
+                }
+
                 // D. Record Reward
                 const { error: insertError } = await supabaseAdmin
                     .from('referral_rewards')
@@ -87,6 +102,17 @@ export async function processReferralRewardAdmin(supabaseAdmin: SupabaseClient, 
                     console.error('[REFERRAL SERVICE] Error recording reward:', insertError);
                     return { success: false, error: insertError };
                 }
+
+                // E. Create success notification for referrer
+                const formattedDate = newEnd.toLocaleDateString('pt-BR');
+                await supabaseAdmin
+                    .from('notifications')
+                    .insert({
+                        user_id: referrerId,
+                        title: '🎉 Você ganhou 1 mês grátis!',
+                        message: `Parabéns! Um amigo que você indicou assinou. Sua próxima cobrança foi adiada para ${formattedDate}.`,
+                        type: 'success'
+                    });
 
                 console.log('[REFERRAL SERVICE] Referral reward granted successfully.');
                 return { success: true, granted: true };

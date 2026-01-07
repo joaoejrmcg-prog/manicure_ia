@@ -69,6 +69,8 @@ export function useCommandManager(playAudio: (text: string, serverAudioData?: st
             });
         }
 
+        /*
+        // Dicas desativadas temporariamente a pedido do usuário
         if (role === 'assistant' && type === 'success') {
             if (Math.random() < 0.3) {
                 setTimeout(() => {
@@ -82,6 +84,7 @@ export function useCommandManager(playAudio: (text: string, serverAudioData?: st
                 }, 500);
             }
         }
+        */
     }, []);
 
     const checkLimit = async () => {
