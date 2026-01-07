@@ -19,7 +19,8 @@ export type ConversationState =
     | { type: 'CONFIRM_ADD_CLIENT', data: { name: string, originalIntent: any } }
     | { type: 'ASK_PAYMENT_METHOD', data: { transactionData: any, clientName: string } }
     | { type: 'ASK_SERVICE', data: { scheduleData: any, clientName: string } }
-    | { type: 'CONFIRM_ACTION', data: { originalIntent: any } };
+    | { type: 'CONFIRM_ACTION', data: { originalIntent: any } }
+    | { type: 'FILLING_SLOT', data: { missingSlot: string, originalIntent: any, accumulatedData: any } };
 
 export function useCommandCenterLogic() {
     const [input, setInput] = useState("");
@@ -403,6 +404,116 @@ export function useCommandCenterLogic() {
             }
         }
 
+        if (conversationState.type === 'FILLING_SLOT') {
+            const { missingSlot, originalIntent, accumulatedData } = conversationState.data;
+            const newData = { ...accumulatedData };
+            console.log('DEBUG: FILLING_SLOT start', { missingSlot, userInput, newData });
+
+            // Enhanced heuristics to capture data even if not the current missing slot
+            const lowerInput = userInput.toLowerCase();
+
+            // Try to extract installments (e.g., "3x", "3 vezes")
+            const installmentsMatch = lowerInput.match(/(\d+)\s*(x|vezes)/);
+            if (installmentsMatch) {
+                const val = parseInt(installmentsMatch[1]);
+                if (!isNaN(val)) newData.installments = val;
+            }
+
+            // Try to extract down payment value (e.g., "entrada de 50")
+            if (lowerInput.includes('entrada')) {
+                const downPaymentMatch = lowerInput.match(/entrada\s*(?:de)?\s*(?:r\$)?\s*(\d+(?:[.,]\d{2})?)/);
+                if (downPaymentMatch) {
+                    const val = parseFloat(downPaymentMatch[1].replace(',', '.'));
+                    if (!isNaN(val)) {
+                        newData.downPaymentValue = val;
+                        newData.hasDownPayment = true;
+                    }
+                }
+            }
+
+            // Specific slot mapping
+            if (missingSlot === 'amount') {
+                const val = parseFloat(userInput.replace(/[^0-9,.]/g, '').replace(',', '.'));
+                if (!isNaN(val)) newData.amount = val;
+            } else if (missingSlot === 'installments' && !newData.installments) {
+                const val = parseInt(userInput.replace(/[^0-9]/g, ''));
+                if (!isNaN(val)) newData.installments = val;
+            } else if (missingSlot === 'hasDownPayment') {
+                if (lowerInput.includes('sim') || lowerInput.includes('teve') || lowerInput.includes('com')) newData.hasDownPayment = true;
+                else if (lowerInput.includes('não') || lowerInput.includes('sem')) newData.hasDownPayment = false;
+            } else if (missingSlot === 'downPaymentValue' && !newData.downPaymentValue) {
+                const val = parseFloat(userInput.replace(/[^0-9,.]/g, '').replace(',', '.'));
+                if (!isNaN(val)) newData.downPaymentValue = val;
+            } else if (missingSlot === 'dueDate') {
+                newData.dueDate = userInput;
+            } else if (missingSlot === 'description' || missingSlot === 'service') {
+                newData[missingSlot] = userInput;
+            }
+
+            // Re-process with AI to validate and format (especially dates)
+            const contextPrompt = `Estou respondendo sobre o campo '${missingSlot}'. O valor é: "${userInput}". 
+            Dados acumulados até agora: ${JSON.stringify(newData)}. 
+            Intenção original: ${originalIntent.intent}. 
+            IMPORTANTE: O input acima refere-se EXCLUSIVAMENTE ao campo '${missingSlot}'. 
+            NÃO altere os outros campos (como service, description, amount) que já estão nos dados acumulados.
+            Atualize apenas o '${missingSlot}' e retorne o JSON completo.
+            Se completou tudo, retorne a ação final. Se ainda falta algo, retorne CONFIRMATION_REQUIRED.`;
+
+            if (!await checkLimit()) return;
+
+            try {
+                const response = await processCommand(contextPrompt, [], 'text');
+
+                if (response.intent === 'CONFIRMATION_REQUIRED') {
+                    addMessage('assistant', response.message);
+
+                    // Determine the next missing slot based on what's missing in the returned data
+                    // If AI didn't return data, fallback to merging what we have
+                    const updatedData = { ...newData, ...(response.data || {}) };
+                    console.log('DEBUG: AI Response in FILLING_SLOT', { responseData: response.data, updatedData });
+
+                    let nextMissingSlot = 'unknown';
+                    if (originalIntent.intent === 'REGISTER_EXPENSE' && !updatedData.description) nextMissingSlot = 'description';
+                    else if (originalIntent.intent === 'REGISTER_SALE' && !updatedData.service) nextMissingSlot = 'service';
+                    else if (!updatedData.amount) nextMissingSlot = 'amount';
+                    else if (!updatedData.installments) nextMissingSlot = 'installments';
+                    else if (updatedData.hasDownPayment === undefined) nextMissingSlot = 'hasDownPayment';
+                    else if (updatedData.hasDownPayment === true && !updatedData.downPaymentValue) nextMissingSlot = 'downPaymentValue';
+                    else if (!updatedData.dueDate) nextMissingSlot = 'dueDate';
+
+                    setConversationState({
+                        type: 'FILLING_SLOT',
+                        data: {
+                            missingSlot: nextMissingSlot,
+                            originalIntent: originalIntent,
+                            accumulatedData: updatedData
+                        }
+                    });
+                    return;
+                } else {
+                    // Success! Process the final action
+                    // We need to route this to the standard handler below (processAIResponse logic)
+                    // But we are inside the useEffect/state handler. 
+                    // Let's call the handler logic directly or set state to IDLE and let the standard flow handle it?
+                    // No, we are in the middle of a flow.
+
+                    // Let's recursively call processAIResponse with the *result* of the AI? 
+                    // No, processAIResponse takes a string.
+
+                    // We should handle the success response here.
+                    // Ensure we pass the accumulated data, merging with what the AI returned
+                    response.data = { ...newData, ...(response.data || {}) };
+                    console.log('DEBUG: Final Action Data Merge', response.data);
+                    await handleFinalAction(response);
+                    setConversationState({ type: 'IDLE' });
+                    return;
+                }
+            } catch (e) {
+                console.error(e);
+                addMessage('assistant', "Não entendi. Pode repetir?", 'error');
+            }
+            return;
+        }
         if (conversationState.type === 'ASK_PAYMENT_METHOD') {
             const paymentMethod = userInput;
             const { transactionData, clientName } = conversationState.data;
@@ -803,7 +914,8 @@ export function useCommandCenterLogic() {
                             const dateStr = date.toISOString().split('T')[0];
 
                             let currentStatus = expenseStatus;
-                            if (i > 0 || expDownPayment > 0) {
+                            // Force pending if it's an installment plan (unless explicitly paid or single installment)
+                            if (i > 0 || expDownPayment > 0 || (expInstallments > 1 && expDownPayment === 0)) {
                                 currentStatus = 'pending';
                             }
 
@@ -1070,6 +1182,196 @@ export function useCommandCenterLogic() {
         } catch (error: any) {
             console.error(error);
             addMessage('assistant', error.message || "Desculpe, tive um erro técnico.", 'error');
+        }
+    };
+
+    const handleFinalAction = async (response: any) => {
+        // This function mimics the switch case logic for final actions
+        // We can reuse the logic by calling a refactored function or just copying the relevant parts for now
+        // Given the complexity, let's just handle the specific intents we expect from slot filling (REGISTER_SALE, REGISTER_EXPENSE)
+
+        if (response.intent === 'REGISTER_SALE') {
+            // ... Logic from REGISTER_SALE case ...
+            // We can actually just call processAIResponse with a special flag or refactor processAIResponse to accept an object?
+            // Refactoring processAIResponse to accept (input: string | AIResponse) would be cleaner but risky for now.
+
+            // Let's copy the critical logic for REGISTER_SALE and REGISTER_EXPENSE here to ensure it works within the hook's context
+
+            const clients = await DataManager.getClients();
+            const client = clients.find(c => c.name.toLowerCase() === response.data.clientName.toLowerCase());
+
+            if (!client) {
+                addMessage('assistant', `Não encontrei a cliente "${response.data.clientName}". Deseja cadastrá-la agora?`);
+                setConversationState({
+                    type: 'CONFIRM_ADD_CLIENT',
+                    data: {
+                        name: response.data.clientName,
+                        originalIntent: response
+                    }
+                });
+                return;
+            }
+
+            let amountStr = String(response.data.amount || '').trim();
+            amountStr = amountStr.replace(/R\$|\.(?=\d{3})/g, '').replace(',', '.').trim();
+            const amount = Number(amountStr);
+
+            if (!amount || isNaN(amount) || amount <= 0) {
+                addMessage('assistant', response.message || "Por favor, informe o valor do serviço.");
+                return;
+            }
+
+            const installments = response.data.installments || 1;
+            const downPayment = response.data.downPaymentValue || response.data.downPayment || 0;
+            let finalInstallmentValue = response.data.installmentValue;
+
+            if (!finalInstallmentValue) {
+                if (downPayment > 0) {
+                    if (installments > 1) {
+                        finalInstallmentValue = (amount - downPayment) / (installments - 1);
+                    } else {
+                        finalInstallmentValue = 0;
+                    }
+                } else {
+                    finalInstallmentValue = amount / installments;
+                }
+            }
+
+            if (downPayment > 0) {
+                // If we have down payment, we might need payment method for it.
+                // If not provided, we ask.
+                if (!response.data.paymentMethod) {
+                    setConversationState({
+                        type: 'ASK_PAYMENT_METHOD',
+                        data: {
+                            transactionData: { ...response.data, amount: downPayment, isEntry: true, remainingInstallments: installments - 1, remainingValue: finalInstallmentValue, fullAmount: amount },
+                            clientName: client.name
+                        }
+                    });
+                    addMessage('assistant', `Certo, entrada de R$${downPayment}. Qual a forma de pagamento da entrada?`);
+                    return;
+                }
+
+                await DataManager.addTransaction({
+                    type: 'income',
+                    amount: downPayment,
+                    description: `${response.data.service} (Entrada)`,
+                    payment_method: response.data.paymentMethod,
+                    client_id: client.id,
+                    status: 'paid'
+                });
+            }
+
+            const startIdx = downPayment > 0 ? 1 : 0;
+            const loopCount = downPayment > 0 ? installments - 1 : installments;
+
+            if (loopCount > 0) {
+                const baseDate = response.data.dueDate ? new Date(response.data.dueDate) : new Date();
+                for (let i = 0; i < loopCount; i++) {
+                    const date = new Date(baseDate.getTime());
+                    const monthOffset = i;
+                    const targetMonth = date.getMonth() + monthOffset;
+                    date.setMonth(targetMonth);
+
+                    if (date.getDate() !== baseDate.getDate()) {
+                        date.setDate(0);
+                    }
+
+                    const dateStr = date.toISOString().split('T')[0];
+
+                    let currentStatus = response.data.status || 'paid';
+                    // Force pending for future installments unless card
+                    if (i > 0 && !response.data.paymentMethod?.toLowerCase().includes('cartão')) {
+                        currentStatus = 'pending';
+                    }
+                    // If it's an installment plan (not card), it's usually pending
+                    if (installments > 1 && !response.data.paymentMethod?.toLowerCase().includes('cartão')) {
+                        currentStatus = 'pending';
+                    }
+
+                    // Specific logic: If has down payment, subsequent are pending (unless card)
+                    if (downPayment > 0) currentStatus = 'pending';
+                    // Specific logic: If NO down payment, ALL are pending (unless card)
+                    if (downPayment === 0 && installments > 1) currentStatus = 'pending';
+
+
+                    await DataManager.addTransaction({
+                        type: 'income',
+                        amount: finalInstallmentValue,
+                        description: `${response.data.service} (${i + 1 + (downPayment > 0 ? 1 : 0)}/${installments})`,
+                        payment_method: response.data.paymentMethod,
+                        client_id: client.id,
+                        status: currentStatus,
+                        due_date: dateStr
+                    });
+                }
+            }
+
+            addMessage('assistant', response.message, 'success');
+        } else if (response.intent === 'REGISTER_EXPENSE') {
+            const expenseStatus = response.data.status || 'paid';
+            const expensePaymentMethod = response.data.paymentMethod;
+
+            const expInstallments = response.data.installments || 1;
+            const expDownPayment = response.data.downPaymentValue || response.data.downPayment || 0;
+
+            let expFinalInstallmentValue = response.data.installmentValue;
+            if (!expFinalInstallmentValue) {
+                if (expDownPayment > 0) {
+                    if (expInstallments > 1) {
+                        expFinalInstallmentValue = (response.data.amount - expDownPayment) / (expInstallments - 1);
+                    } else {
+                        expFinalInstallmentValue = 0;
+                    }
+                } else {
+                    expFinalInstallmentValue = response.data.amount / expInstallments;
+                }
+            }
+
+            if (expDownPayment > 0) {
+                await DataManager.addTransaction({
+                    type: 'expense',
+                    amount: expDownPayment,
+                    description: `${response.data.description} (Entrada)`,
+                    payment_method: expensePaymentMethod,
+                    status: 'paid'
+                });
+            }
+
+            const expLoopCount = expDownPayment > 0 ? expInstallments - 1 : expInstallments;
+
+            if (expLoopCount > 0) {
+                const baseDate = response.data.dueDate ? new Date(response.data.dueDate) : new Date();
+
+                for (let i = 0; i < expLoopCount; i++) {
+                    const date = new Date(baseDate.getTime());
+                    const monthOffset = i;
+
+                    const targetMonth = date.getMonth() + monthOffset;
+                    date.setMonth(targetMonth);
+
+                    if (date.getDate() !== baseDate.getDate()) {
+                        date.setDate(0);
+                    }
+                    const dateStr = date.toISOString().split('T')[0];
+
+                    let currentStatus = expenseStatus;
+                    // Force pending if it's an installment plan (unless explicitly paid or single installment)
+                    if (i > 0 || expDownPayment > 0 || (expInstallments > 1 && expDownPayment === 0)) {
+                        currentStatus = 'pending';
+                    }
+
+                    await DataManager.addTransaction({
+                        type: 'expense',
+                        amount: expFinalInstallmentValue,
+                        description: `${response.data.description} (${i + 1 + (expDownPayment > 0 ? 1 : 0)}/${expInstallments})`,
+                        payment_method: expensePaymentMethod,
+                        status: currentStatus,
+                        due_date: dateStr
+                    });
+                }
+            }
+            addMessage('assistant', response.message, 'success');
         }
     };
 

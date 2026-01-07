@@ -11,6 +11,11 @@ export const getURL = () => {
     process.env.NEXT_PUBLIC_VERCEL_URL ?? // Automatically set by Vercel.
     "http://localhost:3000/";
 
+  // If running on client side, prioritize window.location.origin to avoid localhost issues in prod
+  if (typeof window !== 'undefined') {
+    return window.location.origin + '/';
+  }
+
   // Make sure to include `https://` when not localhost.
   url = url.includes("http") ? url : `https://${url}`;
   // Make sure to include a trailing `/`.

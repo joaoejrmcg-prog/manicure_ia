@@ -162,12 +162,22 @@ export function useBiometricAuth() {
         setIsEnrolled(false);
     };
 
+    /**
+     * Atualizar apenas o token de refresh (usado após login com senha)
+     */
+    const updateBiometricToken = (refreshToken: string) => {
+        if (isEnrolled) {
+            localStorage.setItem('biometric_refresh_token', refreshToken);
+        }
+    };
+
     return {
         isSupported,
         isEnrolled,
         isLoading,
         registerBiometric,
         authenticateBiometric,
-        removeBiometric
+        removeBiometric,
+        updateBiometricToken
     };
 }

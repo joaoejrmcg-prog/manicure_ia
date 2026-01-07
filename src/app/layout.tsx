@@ -15,7 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Meu Negócio IA",
   description: "Gerencie seu negócio com inteligência artificial.",
-  manifest: "/manifest.json",
   themeColor: "#0a0a0a",
   appleWebApp: {
     capable: true,

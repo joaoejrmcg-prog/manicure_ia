@@ -20,7 +20,7 @@ function LoginForm() {
     const router = useRouter();
 
     // Biometric states
-    const { isSupported, isEnrolled, isLoading: biometricLoading, registerBiometric, authenticateBiometric } = useBiometricAuth();
+    const { isSupported, isEnrolled, isLoading: biometricLoading, registerBiometric, authenticateBiometric, updateBiometricToken } = useBiometricAuth();
     const [showBiometricSetup, setShowBiometricSetup] = useState(false);
     const biometricAutoTriggered = useRef(false);
 
@@ -115,7 +115,7 @@ function LoginForm() {
                     }
                 });
                 if (error) throw error;
-                alert("Cadastro realizado! Verifique seu email ou faça login.");
+                alert("✅ Cadastro realizado!\n\n📬 Verifique seu email para confirmar sua conta.\n\n💡 O email será enviado por Supabase. Confira o spam se não aparecer na caixa de entrada!");
                 setMode('login');
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
@@ -125,9 +125,27 @@ function LoginForm() {
                 if (error) throw error;
 
                 // After successful login, offer biometric setup if supported and not enrolled
-                if (isSupported && !isEnrolled) {
-                    setShowBiometricSetup(true);
-                    // Don't redirect yet, wait for user decision
+                if (isSupported) {
+                    if (!isEnrolled) {
+                        setShowBiometricSetup(true);
+                        // Don't redirect yet, wait for user decision
+                    } else {
+                        // Se já tem biometria, atualizar o token para garantir que o auto-login continue funcionando
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session?.refresh_token) {
+                            // Precisamos importar essa função do hook, verifique se foi desestruturada lá em cima
+                            // Como não podemos chamar o hook condicionalmente aqui dentro, vamos assumir que ele já foi chamado no componente
+                            // e vamos usar a função que já temos disponível no escopo do componente
+                            // @ts-ignore - updateBiometricToken will be available after the hook update
+                            if (typeof updateBiometricToken === 'function') {
+                                // @ts-ignore
+                                updateBiometricToken(session.refresh_token);
+                            }
+                        }
+
+                        router.refresh();
+                        router.push("/");
+                    }
                 } else {
                     router.refresh();
                     router.push("/");
