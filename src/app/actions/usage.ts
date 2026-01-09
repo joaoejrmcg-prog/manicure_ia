@@ -3,7 +3,8 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function checkAndIncrementUsage() {
+// Verifica se o usuário pode usar a IA (NÃO incrementa o contador)
+export async function checkUsageLimit() {
     const cookieStore = await cookies();
 
     const supabase = createServerClient(
@@ -51,15 +52,12 @@ export async function checkAndIncrementUsage() {
 
     let plan = subscription?.plan || 'trial';
     let status = subscription?.status || 'trial';
-    let daysOverdue = 0;
 
     // Check expiration
     if (subscription?.current_period_end) {
         const expiry = new Date(subscription.current_period_end);
         if (now > expiry && plan !== 'vip') {
             status = 'overdue';
-            const diffTime = Math.abs(now.getTime() - expiry.getTime());
-            daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         }
     }
 
@@ -81,14 +79,14 @@ export async function checkAndIncrementUsage() {
     // Logic:
     // VIP = Always allowed
     if (plan === 'vip') {
-        // Pass through
+        return { allowed: true, count: currentCount };
     }
     // Overdue Logic
-    else if (status === 'overdue') {
+    if (status === 'overdue') {
         return { allowed: false, count: currentCount, message: `IA bloqueada. Fatura vencida.` };
     }
     // Canceled = Blocked immediately
-    else if (status === 'canceled') {
+    if (status === 'canceled') {
         return { allowed: false, count: currentCount, message: "Assinatura cancelada." };
     }
 
@@ -97,7 +95,54 @@ export async function checkAndIncrementUsage() {
         if (currentCount >= 10) return { allowed: false, count: currentCount };
     }
 
-    // 2. Increment
+    // Apenas verifica, NÃO incrementa
+    return { allowed: true, count: currentCount };
+}
+
+// Incrementa o contador de uso - chamar APENAS quando a ação for bem-sucedida (mensagem verde)
+export async function incrementUsage() {
+    const cookieStore = await cookies();
+
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            cookies: {
+                get(name: string) {
+                    return cookieStore.get(name)?.value;
+                },
+                set(name: string, value: string, options: CookieOptions) {
+                    try {
+                        cookieStore.set({ name, value, ...options });
+                    } catch (error) { }
+                },
+                remove(name: string, options: CookieOptions) {
+                    try {
+                        cookieStore.set({ name, value: '', ...options });
+                    } catch (error) { }
+                },
+            },
+        }
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { count: 0 };
+
+    const now = new Date();
+    const brtDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const today = brtDate.toISOString().split('T')[0];
+
+    // Get current usage
+    const { data: usage } = await supabase
+        .from('daily_usage')
+        .select('count')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .single();
+
+    const currentCount = usage?.count || 0;
+
+    // Increment
     const { error: upsertError } = await supabase
         .from('daily_usage')
         .upsert({
@@ -108,11 +153,18 @@ export async function checkAndIncrementUsage() {
 
     if (upsertError) {
         console.error("Error incrementing usage:", upsertError);
-        // If table doesn't exist, we can't track. Allow for now to not break app.
-        return { allowed: true, count: currentCount };
+        return { count: currentCount };
     }
 
-    return { allowed: true, count: currentCount + 1 };
+    return { count: currentCount + 1 };
+}
+
+// Mantém compatibilidade com código antigo (deprecated - usar checkUsageLimit + incrementUsage)
+export async function checkAndIncrementUsage() {
+    const limit = await checkUsageLimit();
+    if (!limit.allowed) return limit;
+    const result = await incrementUsage();
+    return { allowed: true, count: result.count };
 }
 
 export async function getDailyUsage() {

@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation';
 import { processCommand } from '../actions/ai';
 import { DataManager } from '../lib/data-manager';
 import { supabase } from '../lib/supabase';
-import { checkAndIncrementUsage, getDailyUsage, refundUsageAction } from '../actions/usage';
+import { checkUsageLimit, getDailyUsage, incrementUsage } from '../actions/usage';
 import { getRandomTip } from '@/lib/tips';
 import { AIResponse } from '../types';
 
@@ -55,7 +55,7 @@ export function useCommandManager(playAudio: (text: string, serverAudioData?: st
         checkUser();
     }, [router]);
 
-    const addMessage = useCallback((role: 'user' | 'assistant', content: string, type: 'text' | 'error' | 'success' = 'text', skipRefund = false) => {
+    const addMessage = useCallback((role: 'user' | 'assistant', content: string, type: 'text' | 'error' | 'success' = 'text') => {
         setMessages(prev => [...prev, {
             id: Math.random().toString(36).substring(7),
             role,
@@ -63,9 +63,10 @@ export function useCommandManager(playAudio: (text: string, serverAudioData?: st
             type
         }]);
 
-        if (role === 'assistant' && type !== 'success' && !skipRefund) {
-            refundUsageAction().then(() => {
-                setUsageCount(prev => Math.max(0, prev - 1));
+        // Só cobra crédito quando a ação é success (mensagem verde)
+        if (role === 'assistant' && type === 'success') {
+            incrementUsage().then((result) => {
+                setUsageCount(result.count);
             });
         }
 
@@ -88,13 +89,13 @@ export function useCommandManager(playAudio: (text: string, serverAudioData?: st
     }, []);
 
     const checkLimit = async () => {
-        const usage = await checkAndIncrementUsage();
+        const usage = await checkUsageLimit();
         setUsageCount(usage.count);
 
         if (!usage.allowed) {
-            addMessage('assistant', `🛑 Você atingiu seu limite diário de 10 interações.`, 'error', true);
-            addMessage('assistant', `Você pode continuar realizando esta ação manualmente através do menu do aplicativo.`, 'text', true);
-            addMessage('assistant', `Que tal fazer um upgrade para o plano PRO? Assim você tem acesso ilimitado e seu negócio não para! 🚀`, 'text', true);
+            addMessage('assistant', `🛑 Você atingiu seu limite diário de 10 interações.`, 'error');
+            addMessage('assistant', `Você pode continuar realizando esta ação manualmente através do menu do aplicativo.`, 'text');
+            addMessage('assistant', `Que tal fazer um upgrade para o plano PRO? Assim você tem acesso ilimitado e seu negócio não para! 🚀`, 'text');
             setConversationState({ type: 'IDLE' });
             return false;
         }
