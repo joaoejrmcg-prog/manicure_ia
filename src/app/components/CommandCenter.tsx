@@ -41,26 +41,26 @@ export default function CommandCenter() {
     }, [messages]);
 
     return (
-        <div className="flex flex-col h-full bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-full bg-neutral-900 rounded-2xl border-2 border-neutral-600 overflow-hidden shadow-2xl">
             {/* Header */}
-            <div className="p-4 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm flex items-center justify-between">
+            <div className="p-4 border-b-2 border-neutral-600 bg-neutral-800 backdrop-blur-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-blue-400" />
+                    <div className="w-10 h-10 rounded-full bg-blue-500/20 border-2 border-blue-400/50 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-blue-300" />
                     </div>
                     <div>
-                        <h3 className="font-semibold text-neutral-200">Assistente IA</h3>
-                        <p className="text-xs text-neutral-500 flex items-center gap-1">
+                        <h3 className="font-semibold text-white">Assistente IA</h3>
+                        <p className="text-xs text-neutral-300 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                             Online
                             <span className="mx-1 text-neutral-700">•</span>
                             {['vip', 'pro'].includes(userPlan.toLowerCase()) ? (
-                                <span className="text-blue-400 flex items-center gap-1">
+                                <span className="text-blue-300 flex items-center gap-1">
                                     <Sparkles className="w-3 h-3" />
                                     Ilimitado
                                 </span>
                             ) : (
-                                <span className={usageCount >= 10 ? "text-red-400" : "text-neutral-400"}>
+                                <span className={usageCount >= 10 ? "text-red-400" : "text-neutral-200"}>
                                     {Math.max(0, 10 - usageCount)} respostas verdes restantes
                                 </span>
                             )}
@@ -75,12 +75,12 @@ export default function CommandCenter() {
                 (isListening || (isProcessing && inputType === 'voice') || isSpeaking) && "pb-[350px]"
             )}>
                 {messages.length === 0 && (
-                    <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-50">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center mb-4">
-                            <Bot className="w-8 h-8 text-blue-400" />
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-70">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border-2 border-blue-400/40 flex items-center justify-center mb-4">
+                            <Bot className="w-8 h-8 text-blue-300" />
                         </div>
-                        <h4 className="text-lg font-medium text-neutral-300 mb-2">Como posso ajudar?</h4>
-                        <p className="text-sm text-neutral-500 max-w-xs">
+                        <h4 className="text-lg font-medium text-white mb-2">Como posso ajudar?</h4>
+                        <p className="text-sm text-neutral-300 max-w-xs">
                             Tente dizer: "Agendar reunião com João amanhã às 14h" ou "Recebi 150 reais da consultoria".
                         </p>
                     </div>
@@ -98,16 +98,16 @@ export default function CommandCenter() {
                             className={cn(
                                 "max-w-full md:max-w-[80%] rounded-2xl px-4 py-3 text-lg",
                                 msg.role === 'user'
-                                    ? "bg-blue-600 text-white rounded-tr-none"
+                                    ? "bg-blue-600 text-white rounded-tr-none border-2 border-blue-400"
                                     : cn(
-                                        "bg-neutral-800 text-neutral-200 rounded-tl-none border border-neutral-700",
-                                        msg.type === 'error' && "border-red-500/50 bg-red-500/10 text-red-200",
-                                        msg.type === 'success' && "border-green-500/50 bg-green-500/10 text-green-200"
+                                        "bg-neutral-800 text-white rounded-tl-none border-2 border-neutral-500",
+                                        msg.type === 'error' && "border-red-400 bg-red-500/20 text-red-100",
+                                        msg.type === 'success' && "border-green-400 bg-green-500/20 text-green-100"
                                     )
                             )}
                         >
                             {msg.role === 'assistant' && (
-                                <div className="flex items-center gap-2 mb-1 opacity-50 text-xs uppercase tracking-wider font-medium">
+                                <div className="flex items-center gap-2 mb-1 opacity-70 text-xs uppercase tracking-wider font-medium text-blue-300">
                                     <Bot className="w-3 h-3" />
                                     IA
                                 </div>
@@ -120,7 +120,7 @@ export default function CommandCenter() {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 bg-neutral-900 border-t border-neutral-800">
+            <div className="p-4 bg-neutral-800 border-t-2 border-neutral-600">
                 <div className="flex items-end gap-2">
                     <textarea
                         ref={textareaRef}
@@ -135,35 +135,37 @@ export default function CommandCenter() {
                                 handleSubmit(e);
                             }
                         }}
-                        placeholder={isListening ? "Ouvindo..." : "Digite ou fale um comando..."}
-                        className="flex-1 bg-neutral-700/50 border border-neutral-600 text-neutral-200 placeholder:text-neutral-400 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none resize-none min-h-[56px] max-h-[200px] scrollbar-thin scrollbar-thumb-neutral-600"
+                        placeholder={isListening ? "Ouvindo..." : "Digite..."}
+                        className="flex-1 bg-neutral-700 border-2 border-neutral-500 text-white text-sm placeholder:text-neutral-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all outline-none resize-none h-[40px] max-h-[200px] scrollbar-thin scrollbar-thumb-neutral-500"
                         disabled={isProcessing}
                         rows={1}
                     />
 
-                    <div className="flex items-center gap-2 pb-1">
+
+                    {input.trim() ? (
+                        <button
+                            onClick={() => handleSubmit(new Event('submit') as any)}
+                            disabled={isProcessing}
+                            className="p-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors border-2 border-blue-400 disabled:opacity-50 shadow-lg shadow-blue-500/30"
+                        >
+                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        </button>
+                    ) : (
                         <button
                             onClick={isListening ? stopListening : startListening}
                             className={cn(
-                                "p-3 rounded-xl transition-all duration-300",
+                                "p-2.5 rounded-xl transition-all duration-300",
                                 isListening
-                                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 animate-pulse"
-                                    : "bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200 border border-neutral-700"
+                                    ? "bg-red-500/30 text-red-300 hover:bg-red-500/40 animate-pulse border-2 border-red-400"
+                                    : "bg-neutral-700 hover:bg-neutral-600 text-neutral-200 hover:text-white border-2 border-neutral-500"
                             )}
                             title="Usar voz"
                         >
-                            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                         </button>
-                        <button
-                            onClick={() => handleSubmit(new Event('submit') as any)}
-                            disabled={!input.trim() || isProcessing}
-                            className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 shadow-lg shadow-blue-500/20 disabled:shadow-none"
-                        >
-                            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                        </button>
-                    </div>
+                    )}
                 </div>
-                <p className="text-[10px] text-center text-neutral-600 mt-2">
+                <p className="hidden md:block text-[10px] text-center text-neutral-400 mt-2">
                     Enter para enviar • Shift + Enter para quebrar linha
                 </p>
             </div>

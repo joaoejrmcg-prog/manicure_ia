@@ -91,17 +91,17 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 >
                     <Menu className="w-6 h-6" />
                 </button>
-                <h2 className="text-neutral-200 font-medium">
-                    Olá, <span className="text-blue-400">{user?.email?.split('@')[0] || 'Visitante'}</span>
+                <h2 className="text-neutral-200 font-medium truncate max-w-[120px] md:max-w-none">
+                    <span className="text-blue-400">{user?.email?.split('@')[0] || 'Visitante'}</span>
                 </h2>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
                 <NotificationBell />
                 <TipOfTheDay />
                 <div
                     onClick={handleAvatarClick}
-                    className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white cursor-pointer overflow-hidden relative hover:opacity-80 transition-opacity"
+                    className="w-8 h-8 flex-shrink-0 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white cursor-pointer overflow-hidden relative hover:opacity-80 transition-opacity"
                     title="Clique para alterar a foto"
                 >
                     {uploading ? (
