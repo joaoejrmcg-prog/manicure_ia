@@ -103,3 +103,10 @@ A interface principal é um **Chat via IA** que atua como uma secretária eficie
 - [x] Atualizar UI da página `/indique` para mostrar indicados pagantes vs cadastrados.
 - [x] Criar painel admin para confirmar primeiro pagamento manualmente (MVP).
 - [ ] Implementar Webhook do Asaas para automação completa (Futuro).
+
+### FASE 5: Onboarding & Tutorial ✅ COMPLETA
+- [x] Implementar sistema de Tutorial Progressivo (Níveis 1, 2 e 3).
+- [x] Criar `TutorialContext` e `TutorialOverlay` para gerenciamento de estado e UI.
+- [x] Integrar tutorial com o chat (`CommandCenter`) via comando "tutorial".
+- [x] Diversificar exemplos para abranger múltiplos nichos de prestadores de serviço.
+- [x] Implementar lógica de `autoAdvance` para fluxo mais natural de leitura.

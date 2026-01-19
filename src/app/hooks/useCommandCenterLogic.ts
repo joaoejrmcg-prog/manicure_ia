@@ -1932,7 +1932,17 @@ export function useCommandCenterLogic() {
         e.preventDefault();
         if (!input.trim() || isProcessing) return;
 
-        const userInput = input;
+        const userInput = input.trim();
+
+        // Intercept "tutorial" command
+        if (userInput.toLowerCase() === 'tutorial') {
+            setInput("");
+            setMessages([]); // Clear all messages to start fresh
+            // Dispatch custom event to trigger tutorial
+            window.dispatchEvent(new CustomEvent('start-tutorial'));
+            return;
+        }
+
         setInput("");
         addMessage('user', userInput);
         setIsProcessing(true);

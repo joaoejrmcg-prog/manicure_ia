@@ -4,11 +4,12 @@ import CommandCenter from "./components/CommandCenter";
 import ActionFeed from "./components/ActionFeed";
 import { Sparkles } from "lucide-react";
 import { DashboardProvider } from "./context/DashboardContext";
+import { TutorialProvider } from "./context/TutorialContext";
 import SubscriptionStatus from "./components/SubscriptionStatus";
 
 function HomeContent() {
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col items-center justify-end max-w-4xl mx-auto w-full md:p-4">
+    <div className="h-[calc(100vh-5rem)] flex flex-col items-center justify-end max-w-4xl mx-auto w-full md:p-4">
       <div className="w-full flex-1 flex flex-col relative overflow-hidden">
 
         <div className="relative z-10 flex flex-col h-full">
@@ -41,8 +42,10 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <DashboardProvider>
-      <HomeContent />
-    </DashboardProvider>
+    <TutorialProvider>
+      <DashboardProvider>
+        <HomeContent />
+      </DashboardProvider>
+    </TutorialProvider>
   );
 }

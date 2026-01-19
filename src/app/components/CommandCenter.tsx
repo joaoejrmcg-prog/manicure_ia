@@ -5,6 +5,8 @@ import { Mic, Send, Loader2, LogOut, Bot, User, MicOff, Sparkles } from "lucide-
 import { cn } from "@/app/lib/utils";
 import { VoiceOrb } from "./VoiceOrb";
 import { useCommandCenterLogic } from "../hooks/useCommandCenterLogic";
+import { useTutorial } from "../context/TutorialContext";
+import TutorialOverlay from "./TutorialOverlay";
 
 export default function CommandCenter() {
     const {
@@ -22,6 +24,12 @@ export default function CommandCenter() {
         handleSubmit,
         setInputType
     } = useCommandCenterLogic();
+
+    const {
+        tutorialState,
+        shouldShowTutorialButton,
+        startTutorial,
+    } = useTutorial();
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,15 +82,34 @@ export default function CommandCenter() {
                 "flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-neutral-800 transition-all duration-300",
                 (isListening || (isProcessing && inputType === 'voice') || isSpeaking) && "pb-[350px]"
             )}>
-                {messages.length === 0 && (
+                {/* Tutorial Overlay - Always show when active */}
+                {tutorialState !== 'IDLE' && <TutorialOverlay />}
+
+                {/* Welcome message - Only when no messages and no tutorial */}
+                {messages.length === 0 && tutorialState === 'IDLE' && (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-70">
                         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border-2 border-blue-400/40 flex items-center justify-center mb-4">
                             <Bot className="w-8 h-8 text-blue-300" />
                         </div>
-                        <h4 className="text-lg font-medium text-white mb-2">Como posso ajudar?</h4>
-                        <p className="text-sm text-neutral-300 max-w-xs">
-                            Tente dizer: "Agendar reunião com João amanhã às 14h" ou "Recebi 150 reais da consultoria".
-                        </p>
+                        <h4 className="text-lg font-medium text-white mb-2">
+                            Olá! Sou sua secretária.
+                        </h4>
+                        {shouldShowTutorialButton ? (
+                            <p className="text-sm text-neutral-300 max-w-xs">
+                                Vamos{' '}
+                                <button
+                                    onClick={startTutorial}
+                                    className="text-blue-400 hover:text-blue-300 underline underline-offset-2 font-medium transition-colors"
+                                >
+                                    fazer um tutorial
+                                </button>
+                                ?
+                            </p>
+                        ) : (
+                            <p className="text-sm text-neutral-300 max-w-xs">
+                                Vamos começar? Diga algo como "Cadastra a Maria" ou "Agenda corte amanhã às 10h".
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -136,7 +163,7 @@ export default function CommandCenter() {
                             }
                         }}
                         placeholder={isListening ? "Ouvindo..." : "Digite..."}
-                        className="flex-1 bg-neutral-700 border-2 border-neutral-500 text-white text-sm placeholder:text-neutral-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all outline-none resize-none h-[40px] max-h-[200px] scrollbar-thin scrollbar-thumb-neutral-500"
+                        className="flex-1 bg-neutral-700 border-2 border-neutral-500 text-white text-sm placeholder:text-neutral-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all outline-none resize-none min-h-[44px] max-h-[200px] overflow-y-hidden"
                         disabled={isProcessing}
                         rows={1}
                     />
